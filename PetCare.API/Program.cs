@@ -313,7 +313,8 @@ builder.Services.AddCors(options =>
         }
     });
 });
-
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://*:{port}");
 var app = builder.Build();
 
 // Ensure core roles exist so role assignment and authorization policies work.
@@ -357,7 +358,11 @@ using (var scope = app.Services.CreateScope())
 // Enable Swagger in all environments (you can restrict later)
 app.UseSwagger();
 app.UseSwaggerUI();
-
+app.MapGet("/", context =>
+{
+    context.Response.Redirect("/swagger");
+    return Task.CompletedTask;
+});
 // Enable serving static files from wwwroot
 app.UseStaticFiles();
 
