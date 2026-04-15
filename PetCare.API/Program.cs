@@ -315,6 +315,15 @@ builder.Services.AddCors(options =>
 });
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://*:{port}");
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
 var app = builder.Build();
 
 // Ensure core roles exist so role assignment and authorization policies work.
@@ -366,7 +375,8 @@ app.UseSwaggerUI(c =>
 app.UseStaticFiles();
 
 app.UseHttpsRedirection();
-app.UseCors("AppCorsPolicy");
+app.UseCors("AllowAll");
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
