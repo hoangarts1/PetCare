@@ -376,7 +376,7 @@ app.UseSwaggerUI(c =>
 app.UseStaticFiles();
 
 app.UseHttpsRedirection();
-app.UseCors("AllowFrontend");
+app.UseCors("AllowAll");
 
 app.UseAuthentication();
 app.UseAuthorization();
