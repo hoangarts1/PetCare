@@ -291,7 +291,7 @@ builder.Services.AddCors(options =>
 {
     var allowedOrigins = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")
         ?? builder.Configuration["AllowedOrigins"];
-    
+
     options.AddPolicy("AppCorsPolicy", policy =>
     {
         if (string.IsNullOrEmpty(allowedOrigins) || allowedOrigins == "*")
@@ -315,16 +315,16 @@ builder.Services.AddCors(options =>
 });
 var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 builder.WebHost.UseUrls($"http://*:{port}");
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend",
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:5173")
-                  .AllowAnyHeader()
-                  .AllowAnyMethod();
-        });
-});
+//builder.Services.AddCors(options =>
+//{
+//    options.AddPolicy("AllowFrontend",
+//        policy =>
+//        {
+//            policy.WithOrigins("http://localhost:5173")
+//                  .AllowAnyHeader()
+//                  .AllowAnyMethod();
+//        });
+//});
 var app = builder.Build();
 
 // Ensure core roles exist so role assignment and authorization policies work.
@@ -376,7 +376,7 @@ app.UseSwaggerUI(c =>
 app.UseStaticFiles();
 
 app.UseHttpsRedirection();
-app.UseCors("AllowAll");
+app.UseCors("AppCorsPolicy");
 
 app.UseAuthentication();
 app.UseAuthorization();
