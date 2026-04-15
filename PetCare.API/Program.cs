@@ -2,6 +2,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -37,6 +38,21 @@ builder.Configuration.AddEnvironmentVariables();
 
 // Add services to the container
 builder.Services.AddControllers();
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+{
+    options.Level = System.IO.Compression.CompressionLevel.Fastest;
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = System.IO.Compression.CompressionLevel.Fastest;
+});
+builder.Services.AddHealthChecks();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ITokenBlacklistService, TokenBlacklistService>();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -103,7 +119,7 @@ if (builder.Environment.IsDevelopment())
     Console.WriteLine($"Connection string configured: {!string.IsNullOrEmpty(connectionString)}");
 }
 
-builder.Services.AddDbContext<PetCareDbContext>(options =>
+builder.Services.AddDbContextPool<PetCareDbContext>(options =>
 {
     if (useInMemoryDatabase)
     {
@@ -374,14 +390,21 @@ using (var scope = app.Services.CreateScope())
 */
 
 // Configure the HTTP request pipeline
-// Enable Swagger in all environments (you can restrict later)
-app.UseSwagger();
-app.UseSwaggerUI(c =>
+var enableSwagger = app.Environment.IsDevelopment()
+    || string.Equals(Environment.GetEnvironmentVariable("ENABLE_SWAGGER"), "true", StringComparison.OrdinalIgnoreCase)
+    || builder.Configuration.GetValue<bool>("EnableSwagger", false);
+
+if (enableSwagger)
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PetCare API V1");
-    c.RoutePrefix = ""; // Swagger chạy ở root
-});
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "PetCare API V1");
+        c.RoutePrefix = ""; // Swagger chạy ở root
+    });
+}
 // Enable serving static files from wwwroot
+app.UseResponseCompression();
 app.UseStaticFiles();
 
 app.UseForwardedHeaders();
@@ -390,6 +413,7 @@ app.UseCors("AppCorsPolicy");
 
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapHealthChecks("/health");
 app.MapControllers();
 
 app.Run();
