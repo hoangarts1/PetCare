@@ -1,6 +1,7 @@
 ﻿using System.Text;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -38,6 +39,14 @@ builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddControllers();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<ITokenBlacklistService, TokenBlacklistService>();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    // Render terminates TLS and forwards requests to the app over HTTP.
+    // Trust forwarded proto/for so generated URLs keep https scheme.
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -375,6 +384,7 @@ app.UseSwaggerUI(c =>
 // Enable serving static files from wwwroot
 app.UseStaticFiles();
 
+app.UseForwardedHeaders();
 app.UseHttpsRedirection();
 app.UseCors("AppCorsPolicy");
 
