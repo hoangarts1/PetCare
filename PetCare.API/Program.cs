@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -357,11 +357,10 @@ using (var scope = app.Services.CreateScope())
 // Configure the HTTP request pipeline
 // Enable Swagger in all environments (you can restrict later)
 app.UseSwagger();
-app.UseSwaggerUI();
-app.MapGet("/", context =>
+app.UseSwaggerUI(c =>
 {
-    context.Response.Redirect("/swagger");
-    return Task.CompletedTask;
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "PetCare API V1");
+    c.RoutePrefix = ""; // Swagger chạy ở root
 });
 // Enable serving static files from wwwroot
 app.UseStaticFiles();
