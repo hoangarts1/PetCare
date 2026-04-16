@@ -1,6 +1,5 @@
 using PetCare.Application.Common;
 using PetCare.Application.DTOs.Appointment;
-using PetCare.Application.DTOs.Service;
 using PetCare.Application.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using PetCare.Domain.Entities;
@@ -43,181 +42,6 @@ public class AppointmentService : IAppointmentService
         catch (Exception ex)
         {
             return ServiceResult<IEnumerable<ServiceListItemDto>>.FailureResult($"Error retrieving services: {ex.Message}");
-        }
-    }
-
-    public async Task<ServiceResult<IEnumerable<ServiceDto>>> GetAllServicesAsync(bool includeInactive = true)
-    {
-        try
-        {
-            var query = _unitOfWork.Repository<Service>()
-                .Query()
-                .Include(s => s.Category)
-                .AsQueryable();
-
-            if (!includeInactive)
-                query = query.Where(s => s.IsActive);
-
-            var services = await query
-                .OrderByDescending(s => s.CreatedAt)
-                .ToListAsync();
-
-            var dtos = services.Select(MapServiceDto);
-            return ServiceResult<IEnumerable<ServiceDto>>.SuccessResult(dtos);
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<IEnumerable<ServiceDto>>.FailureResult($"Error retrieving services: {ex.Message}");
-        }
-    }
-
-    public async Task<ServiceResult<ServiceDto>> GetServiceByIdAsync(Guid serviceId, bool includeInactive = true)
-    {
-        try
-        {
-            var service = await _unitOfWork.Repository<Service>()
-                .Query()
-                .Include(s => s.Category)
-                .FirstOrDefaultAsync(s => s.Id == serviceId);
-
-            if (service == null || (!includeInactive && !service.IsActive))
-                return ServiceResult<ServiceDto>.FailureResult("Service not found");
-
-            return ServiceResult<ServiceDto>.SuccessResult(MapServiceDto(service));
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<ServiceDto>.FailureResult($"Error retrieving service: {ex.Message}");
-        }
-    }
-
-    public async Task<ServiceResult<ServiceDto>> CreateServiceAsync(CreateServiceDto dto)
-    {
-        try
-        {
-            var serviceName = dto.ServiceName?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(serviceName))
-                return ServiceResult<ServiceDto>.FailureResult("Service name is required");
-
-            if (dto.Price < 0)
-                return ServiceResult<ServiceDto>.FailureResult("Price must be greater than or equal to 0");
-
-            if (dto.DurationMinutes <= 0)
-                return ServiceResult<ServiceDto>.FailureResult("Duration minutes must be greater than 0");
-
-            if (dto.CategoryId.HasValue)
-            {
-                var categoryExists = await _unitOfWork.Repository<ServiceCategory>()
-                    .AnyAsync(c => c.Id == dto.CategoryId.Value);
-                if (!categoryExists)
-                    return ServiceResult<ServiceDto>.FailureResult("Service category not found");
-            }
-
-            var duplicateNameExists = await _unitOfWork.Repository<Service>()
-                .AnyAsync(s => s.ServiceName.ToLower() == serviceName.ToLower());
-            if (duplicateNameExists)
-                return ServiceResult<ServiceDto>.FailureResult("Service name already exists");
-
-            var service = new Service
-            {
-                ServiceName = serviceName,
-                Description = dto.Description,
-                CategoryId = dto.CategoryId,
-                DurationMinutes = dto.DurationMinutes,
-                Price = dto.Price,
-                IsHomeService = dto.IsHomeService,
-                IsActive = true
-            };
-
-            await _unitOfWork.Repository<Service>().AddAsync(service);
-            await _unitOfWork.SaveChangesAsync();
-
-            var created = await _unitOfWork.Repository<Service>()
-                .Query()
-                .Include(s => s.Category)
-                .FirstAsync(s => s.Id == service.Id);
-
-            return ServiceResult<ServiceDto>.SuccessResult(MapServiceDto(created), "Service created successfully");
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<ServiceDto>.FailureResult($"Error creating service: {ex.Message}");
-        }
-    }
-
-    public async Task<ServiceResult<ServiceDto>> UpdateServiceAsync(Guid serviceId, UpdateServiceDto dto)
-    {
-        try
-        {
-            var service = await _unitOfWork.Services.GetServiceWithDetailsAsync(serviceId);
-            if (service == null)
-                return ServiceResult<ServiceDto>.FailureResult("Service not found");
-
-            if (!string.IsNullOrWhiteSpace(dto.ServiceName))
-            {
-                var normalizedName = dto.ServiceName.Trim();
-                var duplicateNameExists = await _unitOfWork.Repository<Service>()
-                    .AnyAsync(s => s.Id != serviceId && s.ServiceName.ToLower() == normalizedName.ToLower());
-                if (duplicateNameExists)
-                    return ServiceResult<ServiceDto>.FailureResult("Service name already exists");
-
-                service.ServiceName = normalizedName;
-            }
-
-            if (dto.Description != null)
-                service.Description = dto.Description;
-
-            if (dto.Price.HasValue)
-            {
-                if (dto.Price.Value < 0)
-                    return ServiceResult<ServiceDto>.FailureResult("Price must be greater than or equal to 0");
-
-                service.Price = dto.Price.Value;
-            }
-
-            if (dto.DurationMinutes.HasValue)
-            {
-                if (dto.DurationMinutes.Value <= 0)
-                    return ServiceResult<ServiceDto>.FailureResult("Duration minutes must be greater than 0");
-
-                service.DurationMinutes = dto.DurationMinutes.Value;
-            }
-
-            if (dto.IsActive.HasValue)
-                service.IsActive = dto.IsActive.Value;
-
-            await _unitOfWork.Repository<Service>().UpdateAsync(service);
-            await _unitOfWork.SaveChangesAsync();
-
-            var updated = await _unitOfWork.Services.GetServiceWithDetailsAsync(serviceId);
-            return ServiceResult<ServiceDto>.SuccessResult(MapServiceDto(updated!), "Service updated successfully");
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<ServiceDto>.FailureResult($"Error updating service: {ex.Message}");
-        }
-    }
-
-    public async Task<ServiceResult<bool>> DeleteServiceAsync(Guid serviceId)
-    {
-        try
-        {
-            var service = await _unitOfWork.Services.GetByIdAsync(serviceId);
-            if (service == null)
-                return ServiceResult<bool>.FailureResult("Service not found");
-
-            if (!service.IsActive)
-                return ServiceResult<bool>.SuccessResult(true, "Service is already inactive");
-
-            service.IsActive = false;
-            await _unitOfWork.Repository<Service>().UpdateAsync(service);
-            await _unitOfWork.SaveChangesAsync();
-
-            return ServiceResult<bool>.SuccessResult(true, "Service deleted successfully");
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<bool>.FailureResult($"Error deleting service: {ex.Message}");
         }
     }
 
@@ -337,54 +161,6 @@ public class AppointmentService : IAppointmentService
         catch (Exception ex)
         {
             return ServiceResult<AppointmentResponseDto>.FailureResult($"Error retrieving appointment: {ex.Message}");
-        }
-    }
-
-    public async Task<ServiceResult<IEnumerable<AppointmentServiceItemResponseDto>>> GetAppointmentSelectedServicesAsync(Guid appointmentId, Guid userId, string userRole)
-    {
-        try
-        {
-            var appointment = await _unitOfWork.Appointments.GetAppointmentWithDetailsAsync(appointmentId);
-            if (appointment == null)
-                return ServiceResult<IEnumerable<AppointmentServiceItemResponseDto>>.FailureResult("Appointment not found");
-
-            var isPrivileged = IsStaffOrAdmin(userRole);
-            if (!isPrivileged && appointment.UserId != userId)
-            {
-                return ServiceResult<IEnumerable<AppointmentServiceItemResponseDto>>
-                    .FailureResult("You do not have permission to view selected services for this appointment");
-            }
-
-            var selectedServices = appointment.AppointmentServiceItems
-                .OrderBy(i => i.CreatedAt)
-                .Select(i => new AppointmentServiceItemResponseDto
-                {
-                    ServiceId = i.ServiceId,
-                    ServiceName = i.Service?.ServiceName ?? string.Empty,
-                    Quantity = i.Quantity,
-                    UnitPrice = i.UnitPrice,
-                    LineTotal = i.LineTotal
-                })
-                .ToList();
-
-            if (selectedServices.Count == 0 && appointment.Service != null)
-            {
-                selectedServices.Add(new AppointmentServiceItemResponseDto
-                {
-                    ServiceId = appointment.Service.Id,
-                    ServiceName = appointment.Service.ServiceName,
-                    Quantity = 1,
-                    UnitPrice = appointment.Service.Price,
-                    LineTotal = appointment.Service.Price
-                });
-            }
-
-            return ServiceResult<IEnumerable<AppointmentServiceItemResponseDto>>.SuccessResult(selectedServices);
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<IEnumerable<AppointmentServiceItemResponseDto>>
-                .FailureResult($"Error retrieving selected services: {ex.Message}");
         }
     }
 
@@ -861,21 +637,6 @@ public class AppointmentService : IAppointmentService
         CreatedAt = a.CreatedAt,
         UpdatedAt = a.UpdatedAt
     };
-
-    private static ServiceDto MapServiceDto(Service s) => new()
-    {
-        Id = s.Id,
-        CategoryId = s.CategoryId,
-        ServiceName = s.ServiceName,
-        Description = s.Description,
-        DurationMinutes = s.DurationMinutes,
-        Price = s.Price,
-        IsHomeService = s.IsHomeService,
-        IsActive = s.IsActive,
-        CategoryName = s.Category?.CategoryName,
-        CreatedAt = s.CreatedAt
-    };
-
     private string BuildConfirmedEmailBody(string fullName, DateTime appointmentDate, TimeSpan? startTime, string? notes) => $"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #4f9d69; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
