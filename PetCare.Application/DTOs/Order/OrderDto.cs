@@ -14,7 +14,6 @@ public class OrderDto
     public string ShippingAddress { get; set; } = string.Empty;
     public string ShippingPhone { get; set; } = string.Empty;
     public string ShippingName { get; set; } = string.Empty;
-    public string? VoucherCode { get; set; }
     public DateTime OrderedAt { get; set; }
     public List<OrderItemDto> OrderItems { get; set; } = new();
 }

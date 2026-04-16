@@ -9,7 +9,6 @@ public class CreateOrderDto
     public string? ShippingDistrict { get; set; }
     public string? Note { get; set; }
     public string? PaymentMethod { get; set; }
-    public string? VoucherCode { get; set; }
     public List<OrderItemRequestDto> Items { get; set; } = new();
 }
 

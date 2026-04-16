@@ -19,8 +19,6 @@ public class PetCareDbContext : DbContext
     public DbSet<PetBreed> PetBreeds { get; set; }
     public DbSet<Pet> Pets { get; set; }
     public DbSet<HealthRecord> HealthRecords { get; set; }
-    public DbSet<Vaccination> Vaccinations { get; set; }
-    public DbSet<VaccineCatalog> VaccineCatalogs { get; set; }
     public DbSet<HealthReminder> HealthReminders { get; set; }
 
     // E-Commerce
@@ -66,10 +64,8 @@ public class PetCareDbContext : DbContext
     public DbSet<UserSubscription> UserSubscriptions { get; set; }
     public DbSet<AIHealthAnalysis> AIHealthAnalyses { get; set; }
 
-    // Payment & Vouchers
+    // Payments
     public DbSet<Payment> Payments { get; set; }
-    public DbSet<Voucher> Vouchers { get; set; }
-    public DbSet<VoucherUsage> VoucherUsages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -88,7 +84,6 @@ public class PetCareDbContext : DbContext
         ConfigureReviewEntities(modelBuilder);
         ConfigureSubscriptionEntities(modelBuilder);
         ConfigurePaymentEntities(modelBuilder);
-        ConfigureVoucherEntities(modelBuilder);
     }
 
     private void ConfigureUserEntities(ModelBuilder modelBuilder)
@@ -226,57 +221,6 @@ public class PetCareDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.PetId);
-        });
-
-        modelBuilder.Entity<Vaccination>(entity =>
-        {
-            entity.ToTable("vaccinations");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PetId).HasColumnName("pet_id");
-            entity.Property(e => e.VaccineCode).HasColumnName("vaccine_code").HasMaxLength(50);
-            entity.Property(e => e.VaccineName).HasColumnName("vaccine_name").IsRequired().HasMaxLength(255);
-            entity.Property(e => e.VaccinationDate).HasColumnName("vaccination_date");
-            entity.Property(e => e.NextDueDate).HasColumnName("next_due_date");
-            entity.Property(e => e.BatchNumber).HasColumnName("batch_number").HasMaxLength(100);
-            entity.Property(e => e.AdministeredBy).HasColumnName("administered_by");
-            entity.Property(e => e.Notes).HasColumnName("notes");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Pet)
-                .WithMany(p => p.Vaccinations)
-                .HasForeignKey(e => e.PetId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.AdministeredByUser)
-                .WithMany()
-                .HasForeignKey(e => e.AdministeredBy)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.PetId);
-        });
-
-        modelBuilder.Entity<VaccineCatalog>(entity =>
-        {
-            entity.ToTable("vaccine_catalog");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.Code).HasColumnName("code").IsRequired().HasMaxLength(50);
-            entity.Property(e => e.DisplayName).HasColumnName("display_name").IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Aliases).HasColumnName("aliases");
-            entity.Property(e => e.DefaultIntervalDays).HasColumnName("default_interval_days");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasIndex(e => e.Code).IsUnique();
-
-            entity.HasData(
-                new VaccineCatalog { Id = Guid.Parse("9ef90f99-4b40-4e09-9f4b-1c39b44ea001"), Code = "RABIES", DisplayName = "Rabies (Dai)", Aliases = "rabies;dai;dại;tiem dai;tiêm dại", DefaultIntervalDays = 365, IsActive = true, CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new VaccineCatalog { Id = Guid.Parse("9ef90f99-4b40-4e09-9f4b-1c39b44ea002"), Code = "DHPP", DisplayName = "DHPP Core Vaccine", Aliases = "dhpp;dhlpp;5 in 1;5in1;7 in 1;7in1;distemper;parvo;care;ho cũi", DefaultIntervalDays = 365, IsActive = true, CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new VaccineCatalog { Id = Guid.Parse("9ef90f99-4b40-4e09-9f4b-1c39b44ea003"), Code = "BORDETELLA", DisplayName = "Bordetella (Kennel Cough)", Aliases = "bordetella;kennel cough;ho cun cho;ho cũi chó", DefaultIntervalDays = 365, IsActive = true, CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new VaccineCatalog { Id = Guid.Parse("9ef90f99-4b40-4e09-9f4b-1c39b44ea004"), Code = "LEPTO", DisplayName = "Leptospirosis", Aliases = "lepto;leptospirosis", DefaultIntervalDays = 365, IsActive = true, CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) },
-                new VaccineCatalog { Id = Guid.Parse("9ef90f99-4b40-4e09-9f4b-1c39b44ea005"), Code = "PARVO_ONLY", DisplayName = "Parvovirus", Aliases = "parvo;parvovirus", DefaultIntervalDays = 365, IsActive = true, CreatedAt = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc) }
-            );
         });
 
         modelBuilder.Entity<HealthReminder>(entity =>
@@ -1101,67 +1045,6 @@ public class PetCareDbContext : DbContext
             entity.HasIndex(e => e.OrderId);
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.TransactionId);
-        });
-    }
-
-    private void ConfigureVoucherEntities(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<Voucher>(entity =>
-        {
-            entity.ToTable("vouchers");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.Code).HasColumnName("code").IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Name).HasColumnName("name").IsRequired().HasMaxLength(200);
-            entity.Property(e => e.Description).HasColumnName("description");
-            entity.Property(e => e.DiscountType).HasColumnName("discount_type").IsRequired().HasMaxLength(20);
-            entity.Property(e => e.DiscountValue).HasColumnName("discount_value").HasPrecision(10, 2);
-            entity.Property(e => e.MinimumOrderAmount).HasColumnName("minimum_order_amount").HasPrecision(10, 2);
-            entity.Property(e => e.MaximumDiscountAmount).HasColumnName("maximum_discount_amount").HasPrecision(10, 2);
-            entity.Property(e => e.UsageLimit).HasColumnName("usage_limit");
-            entity.Property(e => e.UsedCount).HasColumnName("used_count");
-            entity.Property(e => e.ValidFrom).HasColumnName("valid_from");
-            entity.Property(e => e.ValidTo).HasColumnName("valid_to");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.ApplicableProductCategories).HasColumnName("applicable_product_categories");
-            entity.Property(e => e.ApplicableServices).HasColumnName("applicable_services");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-
-            entity.HasIndex(e => e.Code).IsUnique();
-            entity.HasIndex(e => new { e.IsActive, e.ValidFrom, e.ValidTo });
-        });
-
-        modelBuilder.Entity<VoucherUsage>(entity =>
-        {
-            entity.ToTable("voucher_usages");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.VoucherId).HasColumnName("voucher_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.OrderId).HasColumnName("order_id");
-            entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount").HasPrecision(10, 2);
-            entity.Property(e => e.UsedAt).HasColumnName("used_at");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Voucher)
-                .WithMany(v => v.VoucherUsages)
-                .HasForeignKey(e => e.VoucherId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Order)
-                .WithMany()
-                .HasForeignKey(e => e.OrderId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.VoucherId);
-            entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => e.OrderId);
         });
     }
 

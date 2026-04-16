@@ -17,13 +17,10 @@ public class Order : AuditableEntity
     public string ShippingPhone { get; set; } = string.Empty;
     public string ShippingName { get; set; } = string.Empty;
     public string? Notes { get; set; }
-    public Guid? VoucherId { get; set; }
-    public string? VoucherCode { get; set; }
     public DateTime OrderedAt { get; set; } = DateTime.UtcNow;
 
     // Navigation properties
     public virtual User User { get; set; } = null!;
-    public virtual Voucher? Voucher { get; set; }
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     public virtual ICollection<OrderStatusHistory> StatusHistory { get; set; } = new List<OrderStatusHistory>();
     public virtual ICollection<ProductReview> Reviews { get; set; } = new List<ProductReview>();

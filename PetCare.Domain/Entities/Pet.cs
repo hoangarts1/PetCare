@@ -22,7 +22,6 @@ public class Pet : AuditableEntity
     public virtual PetSpecies? Species { get; set; }
     public virtual PetBreed? Breed { get; set; }
     public virtual ICollection<HealthRecord> HealthRecords { get; set; } = new List<HealthRecord>();
-    public virtual ICollection<Vaccination> Vaccinations { get; set; } = new List<Vaccination>();
     public virtual ICollection<HealthReminder> HealthReminders { get; set; } = new List<HealthReminder>();
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
     public virtual ICollection<AIHealthAnalysis> AIHealthAnalyses { get; set; } = new List<AIHealthAnalysis>();

@@ -25,17 +25,6 @@ public class HealthRecordsController : ControllerBase
     }
 
     /// <summary>
-    /// Get active vaccine catalog options for standardized selection.
-    /// </summary>
-    [HttpGet("vaccine-catalog")]
-    [AllowAnonymous]
-    public async Task<IActionResult> GetVaccineCatalog()
-    {
-        var result = await _healthRecordService.GetVaccineCatalogAsync();
-        return result.Success ? Ok(result) : BadRequest(result);
-    }
-
-    /// <summary>
     /// Get all health records for a pet
     /// </summary>
     [HttpGet("pet/{petId}")]
@@ -49,7 +38,7 @@ public class HealthRecordsController : ControllerBase
     }
 
     /// <summary>
-    /// Get routine dog vaccination and deworming schedule for a pet.
+    /// Get routine dog deworming schedule for a pet.
     /// </summary>
     [HttpGet("pet/{petId}/dog-routine")]
     public async Task<IActionResult> GetDogRoutine(Guid petId)
@@ -58,32 +47,6 @@ public class HealthRecordsController : ControllerBase
         if (userId == Guid.Empty) return Unauthorized();
 
         var result = await _healthRecordService.GetDogRoutineScheduleAsync(petId, userId);
-        return result.Success ? Ok(result) : BadRequest(result);
-    }
-
-    /// <summary>
-    /// Get vaccination history for a pet.
-    /// </summary>
-    [HttpGet("pet/{petId}/vaccinations")]
-    public async Task<IActionResult> GetVaccinationsByPet(Guid petId)
-    {
-        var userId = GetUserId();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        var result = await _healthRecordService.GetVaccinationsByPetAsync(petId, userId);
-        return result.Success ? Ok(result) : BadRequest(result);
-    }
-
-    /// <summary>
-    /// Record a completed vaccination for a pet (owner, staff, admin).
-    /// </summary>
-    [HttpPost("pet/{petId}/vaccinations")]
-    public async Task<IActionResult> AddVaccination(Guid petId, [FromBody] CreateVaccinationDto dto)
-    {
-        var userId = GetUserId();
-        if (userId == Guid.Empty) return Unauthorized();
-
-        var result = await _healthRecordService.AddVaccinationAsync(petId, dto, userId);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 

@@ -12,7 +12,6 @@ using PetCare.Application.DTOs.Notification;
 using PetCare.Application.DTOs.Review;
 using PetCare.Application.DTOs.Health;
 using PetCare.Application.DTOs.Payment;
-using PetCare.Application.DTOs.Voucher;
 using PetCare.Application.DTOs.Chat;
 using PetCare.Domain.Entities;
 
@@ -105,10 +104,6 @@ public class MappingProfile : Profile
         // Payment mappings
         CreateMap<Payment, PaymentDto>()
             .ForMember(dest => dest.OrderNumber, opt => opt.MapFrom(src => src.Order != null ? src.Order.OrderNumber : string.Empty));
-
-        // Voucher mappings
-        CreateMap<Voucher, VoucherDto>();
-        CreateMap<VoucherUsage, VoucherDto>();
 
         // Chat mappings
         CreateMap<ChatSession, ChatSessionDto>();

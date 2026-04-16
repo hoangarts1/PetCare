@@ -27,7 +27,6 @@ public class PetRepository : GenericRepository<Pet>, IPetRepository
             .Include(p => p.Breed)
             .Include(p => p.User)
             .Include(p => p.HealthRecords)
-            .Include(p => p.Vaccinations)
             .FirstOrDefaultAsync(p => p.Id == petId);
     }
 

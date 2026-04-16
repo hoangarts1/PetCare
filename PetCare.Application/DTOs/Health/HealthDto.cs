@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace PetCare.Application.DTOs.Health;
 
 public class HealthRecordDto
@@ -52,7 +50,6 @@ public class DogRoutineScheduleDto
     public bool IsDog { get; set; }
     public DateTime? DateOfBirth { get; set; }
     public string? Note { get; set; }
-    public List<DogRoutineItemDto> Vaccinations { get; set; } = new();
     public List<DogRoutineItemDto> Deworming { get; set; } = new();
 }
 
@@ -65,47 +62,6 @@ public class DogRoutineItemDto
     public string Frequency { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
-}
-
-public class CreateVaccinationDto
-{
-    [StringLength(50)]
-    public string? VaccineCode { get; set; }
-
-    [Required]
-    [StringLength(255, MinimumLength = 2)]
-    public string VaccineName { get; set; } = string.Empty;
-
-    public DateTime? VaccinationDate { get; set; }
-    public DateTime? NextDueDate { get; set; }
-
-    [StringLength(100)]
-    public string? BatchNumber { get; set; }
-
-    [StringLength(1000)]
-    public string? Notes { get; set; }
-}
-
-public class VaccineCatalogDto
-{
-    public string Code { get; set; } = string.Empty;
-    public string DisplayName { get; set; } = string.Empty;
-    public string[] Aliases { get; set; } = [];
-    public int? DefaultIntervalDays { get; set; }
-}
-
-public class VaccinationDto
-{
-    public Guid Id { get; set; }
-    public Guid PetId { get; set; }
-    public string? VaccineCode { get; set; }
-    public string VaccineName { get; set; } = string.Empty;
-    public DateTime VaccinationDate { get; set; }
-    public DateTime? NextDueDate { get; set; }
-    public string? BatchNumber { get; set; }
-    public Guid? AdministeredBy { get; set; }
-    public string? Notes { get; set; }
-    public DateTime CreatedAt { get; set; }
 }
 
 
