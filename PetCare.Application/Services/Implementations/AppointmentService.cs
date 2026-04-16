@@ -1,5 +1,6 @@
 using PetCare.Application.Common;
 using PetCare.Application.DTOs.Appointment;
+using PetCare.Application.DTOs.Service;
 using PetCare.Application.Services.Interfaces;
 using Microsoft.EntityFrameworkCore;
 using PetCare.Domain.Entities;
@@ -42,6 +43,164 @@ public class AppointmentService : IAppointmentService
         catch (Exception ex)
         {
             return ServiceResult<IEnumerable<ServiceListItemDto>>.FailureResult($"Error retrieving services: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<IEnumerable<ServiceDto>>> GetAllServicesAsync()
+    {
+        try
+        {
+            var services = await _unitOfWork.Repository<Service>()
+                .Query()
+                .Include(s => s.Category)
+                .OrderByDescending(s => s.CreatedAt)
+                .ToListAsync();
+
+            var dtos = services.Select(MapToServiceDto);
+            return ServiceResult<IEnumerable<ServiceDto>>.SuccessResult(dtos);
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<IEnumerable<ServiceDto>>.FailureResult($"Error retrieving all services: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<ServiceDto>> GetServiceByIdAsync(Guid serviceId)
+    {
+        try
+        {
+            var service = await _unitOfWork.Repository<Service>()
+                .Query()
+                .Include(s => s.Category)
+                .FirstOrDefaultAsync(s => s.Id == serviceId);
+
+            if (service == null)
+                return ServiceResult<ServiceDto>.FailureResult("Service not found");
+
+            return ServiceResult<ServiceDto>.SuccessResult(MapToServiceDto(service));
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<ServiceDto>.FailureResult($"Error retrieving service: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<ServiceDto>> CreateServiceAsync(CreateServiceDto dto)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.ServiceName))
+                return ServiceResult<ServiceDto>.FailureResult("Service name is required");
+
+            if (dto.Price < 0)
+                return ServiceResult<ServiceDto>.FailureResult("Price must be greater than or equal to 0");
+
+            if (dto.DurationMinutes <= 0)
+                return ServiceResult<ServiceDto>.FailureResult("DurationMinutes must be greater than 0");
+
+            if (dto.CategoryId.HasValue)
+            {
+                var categoryExists = await _unitOfWork.Repository<ServiceCategory>().AnyAsync(c => c.Id == dto.CategoryId.Value);
+                if (!categoryExists)
+                    return ServiceResult<ServiceDto>.FailureResult("Service category not found");
+            }
+
+            var service = new Service
+            {
+                CategoryId = dto.CategoryId,
+                ServiceName = dto.ServiceName.Trim(),
+                Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
+                DurationMinutes = dto.DurationMinutes,
+                Price = dto.Price,
+                IsHomeService = dto.IsHomeService,
+                IsActive = true
+            };
+
+            await _unitOfWork.Repository<Service>().AddAsync(service);
+            await _unitOfWork.SaveChangesAsync();
+
+            var created = await _unitOfWork.Repository<Service>()
+                .Query()
+                .Include(s => s.Category)
+                .FirstAsync(s => s.Id == service.Id);
+
+            return ServiceResult<ServiceDto>.SuccessResult(MapToServiceDto(created), "Service created successfully");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<ServiceDto>.FailureResult($"Error creating service: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<ServiceDto>> UpdateServiceAsync(Guid serviceId, UpdateServiceDto dto)
+    {
+        try
+        {
+            var service = await _unitOfWork.Repository<Service>().GetByIdAsync(serviceId);
+            if (service == null)
+                return ServiceResult<ServiceDto>.FailureResult("Service not found");
+
+            if (!string.IsNullOrWhiteSpace(dto.ServiceName))
+                service.ServiceName = dto.ServiceName.Trim();
+
+            if (dto.Description != null)
+                service.Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim();
+
+            if (dto.Price.HasValue)
+            {
+                if (dto.Price.Value < 0)
+                    return ServiceResult<ServiceDto>.FailureResult("Price must be greater than or equal to 0");
+
+                service.Price = dto.Price.Value;
+            }
+
+            if (dto.DurationMinutes.HasValue)
+            {
+                if (dto.DurationMinutes.Value <= 0)
+                    return ServiceResult<ServiceDto>.FailureResult("DurationMinutes must be greater than 0");
+
+                service.DurationMinutes = dto.DurationMinutes.Value;
+            }
+
+            if (dto.IsActive.HasValue)
+                service.IsActive = dto.IsActive.Value;
+
+            await _unitOfWork.Repository<Service>().UpdateAsync(service);
+            await _unitOfWork.SaveChangesAsync();
+
+            var updated = await _unitOfWork.Repository<Service>()
+                .Query()
+                .Include(s => s.Category)
+                .FirstAsync(s => s.Id == service.Id);
+
+            return ServiceResult<ServiceDto>.SuccessResult(MapToServiceDto(updated), "Service updated successfully");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<ServiceDto>.FailureResult($"Error updating service: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<bool>> DeleteServiceAsync(Guid serviceId)
+    {
+        try
+        {
+            var service = await _unitOfWork.Repository<Service>().GetByIdAsync(serviceId);
+            if (service == null)
+                return ServiceResult<bool>.FailureResult("Service not found");
+
+            if (!service.IsActive)
+                return ServiceResult<bool>.FailureResult("Service is already inactive");
+
+            service.IsActive = false;
+            await _unitOfWork.Repository<Service>().UpdateAsync(service);
+            await _unitOfWork.SaveChangesAsync();
+
+            return ServiceResult<bool>.SuccessResult(true, "Service deleted successfully");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<bool>.FailureResult($"Error deleting service: {ex.Message}");
         }
     }
 
@@ -637,6 +796,21 @@ public class AppointmentService : IAppointmentService
         CreatedAt = a.CreatedAt,
         UpdatedAt = a.UpdatedAt
     };
+
+    private static ServiceDto MapToServiceDto(Service s) => new()
+    {
+        Id = s.Id,
+        CategoryId = s.CategoryId,
+        ServiceName = s.ServiceName,
+        Description = s.Description,
+        DurationMinutes = s.DurationMinutes,
+        Price = s.Price,
+        IsHomeService = s.IsHomeService,
+        IsActive = s.IsActive,
+        CategoryName = s.Category?.CategoryName,
+        CreatedAt = s.CreatedAt
+    };
+
     private string BuildConfirmedEmailBody(string fullName, DateTime appointmentDate, TimeSpan? startTime, string? notes) => $"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #4f9d69; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PetCare.Application.DTOs.Appointment;
+using PetCare.Application.DTOs.Service;
 using PetCare.Application.Services.Interfaces;
 
 namespace PetCare.API.Controllers;
@@ -26,6 +27,67 @@ public class AppointmentsController : ControllerBase
     public async Task<IActionResult> GetAvailableServices()
     {
         var result = await _appointmentService.GetAvailableServicesAsync();
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Staff / Admin gets all services (including inactive)
+    /// </summary>
+    [HttpGet("services/all")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> GetAllServices()
+    {
+        var result = await _appointmentService.GetAllServicesAsync();
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Staff / Admin gets service detail by ID
+    /// </summary>
+    [HttpGet("services/{id:guid}")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> GetServiceById(Guid id)
+    {
+        var result = await _appointmentService.GetServiceByIdAsync(id);
+        return result.Success ? Ok(result) : NotFound(result);
+    }
+
+    /// <summary>
+    /// Staff / Admin creates a service
+    /// </summary>
+    [HttpPost("services")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> CreateService([FromBody] CreateServiceDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _appointmentService.CreateServiceAsync(dto);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Staff / Admin updates a service
+    /// </summary>
+    [HttpPut("services/{id:guid}")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> UpdateService(Guid id, [FromBody] UpdateServiceDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var result = await _appointmentService.UpdateServiceAsync(id, dto);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
+    /// Staff / Admin soft-deletes a service
+    /// </summary>
+    [HttpDelete("services/{id:guid}")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> DeleteService(Guid id)
+    {
+        var result = await _appointmentService.DeleteServiceAsync(id);
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
