@@ -192,6 +192,16 @@ public class AuthService : IAuthService
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(idToken))
+            {
+                return ServiceResult<AuthResponseDto>.FailureResult("Google idToken is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(_googleClientId))
+            {
+                return ServiceResult<AuthResponseDto>.FailureResult("Google login is not configured. Missing GOOGLE_CLIENT_ID on server.");
+            }
+
             var settings = new GoogleJsonWebSignature.ValidationSettings
             {
                 Audience = new[] { _googleClientId }

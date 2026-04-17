@@ -270,6 +270,14 @@ if (string.IsNullOrWhiteSpace(jwtAudience))
     jwtAudience = builder.Configuration["Jwt:Audience"];
 jwtAudience ??= "PetCare.Client";
 
+var googleClientId = Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID")
+    ?? builder.Configuration["Google:ClientId"];
+
+if (string.IsNullOrWhiteSpace(googleClientId))
+{
+    Console.WriteLine("WARNING: GOOGLE_CLIENT_ID is missing. Google login may fail.");
+}
+
 builder.Services.AddAuthentication(options =>
     {
         options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
