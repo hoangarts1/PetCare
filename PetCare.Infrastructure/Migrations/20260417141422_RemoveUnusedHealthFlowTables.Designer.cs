@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PetCare.Infrastructure.Data;
@@ -11,9 +12,11 @@ using PetCare.Infrastructure.Data;
 namespace PetCare.Infrastructure.Migrations
 {
     [DbContext(typeof(PetCareDbContext))]
-    partial class PetCareDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260417141422_RemoveUnusedHealthFlowTables")]
+    partial class RemoveUnusedHealthFlowTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -22,6 +25,88 @@ namespace PetCare.Infrastructure.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("PetCare.Domain.Entities.AIHealthAnalysis", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AIModel")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("ai_model");
+
+                    b.Property<string>("AIResponse")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ai_response");
+
+                    b.Property<string>("AnalysisType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("analysis_type");
+
+                    b.Property<decimal?>("ConfidenceScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("confidence_score");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("InputData")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("input_data");
+
+                    b.Property<bool>("IsReviewed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_reviewed");
+
+                    b.Property<Guid>("PetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("pet_id");
+
+                    b.Property<string>("Recommendations")
+                        .HasColumnType("text")
+                        .HasColumnName("recommendations");
+
+                    b.Property<string>("ReviewNotes")
+                        .HasColumnType("text")
+                        .HasColumnName("review_notes");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid?>("ReviewedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by");
+
+                    b.Property<int>("TokensUsed")
+                        .HasColumnType("integer")
+                        .HasColumnName("tokens_used");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PetId");
+
+                    b.HasIndex("ReviewedBy");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("PetId", "AnalysisType");
+
+                    b.ToTable("ai_health_analyses", "petcare");
+                });
 
             modelBuilder.Entity("PetCare.Domain.Entities.Appointment", b =>
                 {
@@ -844,6 +929,24 @@ namespace PetCare.Infrastructure.Migrations
                     b.ToTable("users", "petcare");
                 });
 
+            modelBuilder.Entity("PetCare.Domain.Entities.AIHealthAnalysis", b =>
+                {
+                    b.HasOne("PetCare.Domain.Entities.User", "Reviewer")
+                        .WithMany()
+                        .HasForeignKey("ReviewedBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PetCare.Domain.Entities.User", "User")
+                        .WithMany("AIHealthAnalyses")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Reviewer");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("PetCare.Domain.Entities.Appointment", b =>
                 {
                     b.HasOne("PetCare.Domain.Entities.User", "AssignedStaff")
@@ -1091,6 +1194,8 @@ namespace PetCare.Infrastructure.Migrations
 
             modelBuilder.Entity("PetCare.Domain.Entities.User", b =>
                 {
+                    b.Navigation("AIHealthAnalyses");
+
                     b.Navigation("Appointments");
 
                     b.Navigation("CartItems");

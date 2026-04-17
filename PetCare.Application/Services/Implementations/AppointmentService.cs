@@ -35,8 +35,7 @@ public class AppointmentService : IAppointmentService
                 ServiceName = s.ServiceName,
                 Description = s.Description,
                 Price = s.Price,
-                DurationMinutes = s.DurationMinutes,
-                CategoryName = s.Category?.CategoryName
+                DurationMinutes = s.DurationMinutes
             });
             return ServiceResult<IEnumerable<ServiceListItemDto>>.SuccessResult(dtos);
         }
@@ -52,7 +51,6 @@ public class AppointmentService : IAppointmentService
         {
             var services = await _unitOfWork.Repository<Service>()
                 .Query()
-                .Include(s => s.Category)
                 .OrderByDescending(s => s.CreatedAt)
                 .ToListAsync();
 
@@ -71,7 +69,6 @@ public class AppointmentService : IAppointmentService
         {
             var service = await _unitOfWork.Repository<Service>()
                 .Query()
-                .Include(s => s.Category)
                 .FirstOrDefaultAsync(s => s.Id == serviceId);
 
             if (service == null)
@@ -98,16 +95,8 @@ public class AppointmentService : IAppointmentService
             if (dto.DurationMinutes <= 0)
                 return ServiceResult<ServiceDto>.FailureResult("DurationMinutes must be greater than 0");
 
-            if (dto.CategoryId.HasValue)
-            {
-                var categoryExists = await _unitOfWork.Repository<ServiceCategory>().AnyAsync(c => c.Id == dto.CategoryId.Value);
-                if (!categoryExists)
-                    return ServiceResult<ServiceDto>.FailureResult("Service category not found");
-            }
-
             var service = new Service
             {
-                CategoryId = dto.CategoryId,
                 ServiceName = dto.ServiceName.Trim(),
                 Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim(),
                 DurationMinutes = dto.DurationMinutes,
@@ -121,7 +110,6 @@ public class AppointmentService : IAppointmentService
 
             var created = await _unitOfWork.Repository<Service>()
                 .Query()
-                .Include(s => s.Category)
                 .FirstAsync(s => s.Id == service.Id);
 
             return ServiceResult<ServiceDto>.SuccessResult(MapToServiceDto(created), "Service created successfully");
@@ -170,7 +158,6 @@ public class AppointmentService : IAppointmentService
 
             var updated = await _unitOfWork.Repository<Service>()
                 .Query()
-                .Include(s => s.Category)
                 .FirstAsync(s => s.Id == service.Id);
 
             return ServiceResult<ServiceDto>.SuccessResult(MapToServiceDto(updated), "Service updated successfully");
@@ -232,7 +219,6 @@ public class AppointmentService : IAppointmentService
                 ServiceId = dto.ServiceId,
                 AppointmentType = dto.AppointmentType,
                 AppointmentStatus = "pending",
-                BranchId = dto.BranchId,
                 AppointmentDate = DateTime.SpecifyKind(dto.AppointmentDate, DateTimeKind.Utc),
                 StartTime = dto.StartTime,
                 EndTime = dto.EndTime,
@@ -546,63 +532,33 @@ public class AppointmentService : IAppointmentService
         if (appointment.AppointmentStatus != "checked-in" && appointment.AppointmentStatus != "confirmed")
             return ServiceResult<AppointmentResponseDto>.FailureResult("Lịch chưa ở trạng thái check-in/confirmed");
 
-        var selected = dto.Services
-            .Where(s => s.ServiceId != Guid.Empty && s.Quantity > 0)
-            .ToList();
-        if (selected.Count == 0)
-            return ServiceResult<AppointmentResponseDto>.FailureResult("Vui lòng chọn ít nhất 1 dịch vụ");
+        if (!appointment.ServiceId.HasValue)
+            return ServiceResult<AppointmentResponseDto>.FailureResult("Lịch hẹn chưa có dịch vụ chính");
 
-        var existingItems = await _unitOfWork.Repository<AppointmentServiceItem>()
-            .FindAsync(i => i.AppointmentId == appointmentId);
-        var existingList = existingItems.ToList();
-        if (existingList.Count > 0)
-            await _unitOfWork.Repository<AppointmentServiceItem>().DeleteRangeAsync(existingList);
+        var service = await _unitOfWork.Services.GetByIdAsync(appointment.ServiceId.Value);
+        if (service == null || !service.IsActive)
+            return ServiceResult<AppointmentResponseDto>.FailureResult("Dịch vụ không tồn tại hoặc đã ngừng hoạt động");
 
-        decimal total = 0m;
-        var itemsToAdd = new List<AppointmentServiceItem>();
-        foreach (var selectedService in selected)
-        {
-            var service = await _unitOfWork.Services.GetByIdAsync(selectedService.ServiceId);
-            if (service == null || !service.IsActive)
-                return ServiceResult<AppointmentResponseDto>.FailureResult("Một trong các dịch vụ không tồn tại hoặc đã ngừng hoạt động");
-
-            if (service.IsHomeService)
-                return ServiceResult<AppointmentResponseDto>.FailureResult("Không hỗ trợ dịch vụ tại nhà");
-
-            var lineTotal = service.Price * selectedService.Quantity;
-            total += lineTotal;
-
-            itemsToAdd.Add(new AppointmentServiceItem
-            {
-                AppointmentId = appointmentId,
-                ServiceId = service.Id,
-                Quantity = selectedService.Quantity,
-                UnitPrice = service.Price,
-                LineTotal = lineTotal
-            });
-        }
-
-        await _unitOfWork.Repository<AppointmentServiceItem>().AddRangeAsync(itemsToAdd);
+        if (service.IsHomeService)
+            return ServiceResult<AppointmentResponseDto>.FailureResult("Không hỗ trợ dịch vụ tại nhà");
 
         appointment.AssignedStaffId = staffId;
         appointment.AppointmentStatus = "in-progress";
         appointment.StartedAt = DateTime.UtcNow;
         appointment.UpdatedAt = DateTime.UtcNow;
-        appointment.TotalAmount = total;
-        appointment.ServiceId = itemsToAdd.First().ServiceId;
+        appointment.TotalAmount = service.Price;
         if (!string.IsNullOrWhiteSpace(dto.Notes))
             appointment.Notes = dto.Notes;
 
         await _unitOfWork.Repository<Appointment>().UpdateAsync(appointment);
 
-        var selectedSummary = string.Join(", ", itemsToAdd.Select(i => $"{i.Quantity}x {i.ServiceId}"));
         await _unitOfWork.Repository<AppointmentStatusHistory>().AddAsync(new AppointmentStatusHistory
         {
             AppointmentId = appointment.Id,
             Status = "in-progress",
             Notes = string.IsNullOrWhiteSpace(dto.Notes)
-                ? $"Bắt đầu thực hiện dịch vụ. Danh mục đã chọn: {selectedSummary}"
-                : $"{dto.Notes}. Danh mục đã chọn: {selectedSummary}",
+                ? "Bắt đầu thực hiện dịch vụ"
+                : dto.Notes,
             UpdatedBy = staffId,
             CreatedAt = DateTime.UtcNow
         });
@@ -622,24 +578,8 @@ public class AppointmentService : IAppointmentService
         if (appointment.AppointmentStatus != "in-progress")
             return ServiceResult<AppointmentResponseDto>.FailureResult("Chỉ có thể hoàn thành khi lịch ở trạng thái in-progress");
 
-        if (!appointment.AppointmentServiceItems.Any() && appointment.ServiceId.HasValue)
-        {
-            var fallback = await _unitOfWork.Services.GetByIdAsync(appointment.ServiceId.Value);
-            if (fallback != null)
-            {
-                var item = new AppointmentServiceItem
-                {
-                    AppointmentId = appointment.Id,
-                    ServiceId = fallback.Id,
-                    Quantity = 1,
-                    UnitPrice = fallback.Price,
-                    LineTotal = fallback.Price
-                };
-
-                await _unitOfWork.Repository<AppointmentServiceItem>().AddAsync(item);
-                appointment.TotalAmount = fallback.Price;
-            }
-        }
+        if (!appointment.TotalAmount.HasValue && appointment.Service != null)
+            appointment.TotalAmount = appointment.Service.Price;
 
         appointment.AppointmentStatus = "completed";
         appointment.AssignedStaffId = staffId;
@@ -649,9 +589,6 @@ public class AppointmentService : IAppointmentService
 
         if (!string.IsNullOrWhiteSpace(notes))
             appointment.Notes = notes;
-
-        if (!appointment.TotalAmount.HasValue)
-            appointment.TotalAmount = appointment.AppointmentServiceItems.Sum(i => i.LineTotal);
 
         await _unitOfWork.Repository<Appointment>().UpdateAsync(appointment);
 
@@ -697,18 +634,8 @@ public class AppointmentService : IAppointmentService
         if (!isPrivileged && appointment.UserId != userId)
             return ServiceResult<AppointmentBillDto>.FailureResult("You do not have permission to view this bill");
 
-        var items = appointment.AppointmentServiceItems
-            .Select(i => new AppointmentServiceItemResponseDto
-            {
-                ServiceId = i.ServiceId,
-                ServiceName = i.Service?.ServiceName ?? string.Empty,
-                Quantity = i.Quantity,
-                UnitPrice = i.UnitPrice,
-                LineTotal = i.LineTotal
-            })
-            .ToList();
-
-        if (items.Count == 0 && appointment.Service != null)
+        var items = new List<AppointmentServiceItemResponseDto>();
+        if (appointment.Service != null)
         {
             items.Add(new AppointmentServiceItemResponseDto
             {
@@ -729,7 +656,6 @@ public class AppointmentService : IAppointmentService
             BillDate = appointment.CompletedAt ?? appointment.UpdatedAt ?? DateTime.UtcNow,
             CustomerName = appointment.User?.FullName ?? string.Empty,
             Pet = appointment.Pet,
-            BranchName = appointment.Branch?.BranchName ?? "PetCare Center",
             Items = items,
             TotalAmount = total
         };
@@ -749,8 +675,6 @@ public class AppointmentService : IAppointmentService
         ServicePrice = a.Service?.Price,
         AppointmentType = a.AppointmentType,
         AppointmentStatus = a.AppointmentStatus,
-        BranchId = a.BranchId,
-        BranchName = a.Branch?.BranchName,
         AssignedStaffId = a.AssignedStaffId,
         AssignedStaffName = a.AssignedStaff?.FullName,
         AppointmentDate = a.AppointmentDate,
@@ -764,17 +688,6 @@ public class AppointmentService : IAppointmentService
         CompletedAt = a.CompletedAt,
         BillNumber = a.BillNumber,
         TotalAmount = a.TotalAmount,
-        SelectedServices = a.AppointmentServiceItems
-            .OrderBy(i => i.CreatedAt)
-            .Select(i => new AppointmentServiceItemResponseDto
-            {
-                ServiceId = i.ServiceId,
-                ServiceName = i.Service?.ServiceName ?? string.Empty,
-                Quantity = i.Quantity,
-                UnitPrice = i.UnitPrice,
-                LineTotal = i.LineTotal
-            })
-            .ToList(),
         StatusHistory = a.StatusHistory
             .OrderBy(h => h.CreatedAt)
             .Select(h => new AppointmentStatusHistoryDto
@@ -791,14 +704,12 @@ public class AppointmentService : IAppointmentService
     private static ServiceDto MapToServiceDto(Service s) => new()
     {
         Id = s.Id,
-        CategoryId = s.CategoryId,
         ServiceName = s.ServiceName,
         Description = s.Description,
         DurationMinutes = s.DurationMinutes,
         Price = s.Price,
         IsHomeService = s.IsHomeService,
         IsActive = s.IsActive,
-        CategoryName = s.Category?.CategoryName,
         CreatedAt = s.CreatedAt
     };
 

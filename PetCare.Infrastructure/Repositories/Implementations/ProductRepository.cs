@@ -38,7 +38,6 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Category)
 
             .Include(p => p.Images)
-            .Include(p => p.Reviews.Where(r => r.IsApproved))
             .FirstOrDefaultAsync(p => p.Id == productId);
     }
 

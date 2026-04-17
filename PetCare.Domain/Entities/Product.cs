@@ -25,5 +25,4 @@ public class Product : AuditableEntity
     public virtual ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
-    public virtual ICollection<ProductReview> Reviews { get; set; } = new List<ProductReview>();
 }

@@ -14,13 +14,8 @@ public class PetCareDbContext : DbContext
     public DbSet<Role> Roles { get; set; }
     public DbSet<User> Users { get; set; }
 
-    // Health Management
-    public DbSet<HealthRecord> HealthRecords { get; set; }
-    public DbSet<HealthReminder> HealthReminders { get; set; }
-
     // E-Commerce
     public DbSet<ProductCategory> ProductCategories { get; set; }
-
     public DbSet<Product> Products { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<CartItem> CartItems { get; set; }
@@ -29,29 +24,13 @@ public class PetCareDbContext : DbContext
     public DbSet<OrderStatusHistory> OrderStatusHistories { get; set; }
 
     // Services & Appointments
-    public DbSet<Branch> Branches { get; set; }
-    public DbSet<ServiceCategory> ServiceCategories { get; set; }
     public DbSet<Service> Services { get; set; }
     public DbSet<StaffService> StaffServices { get; set; }
-    public DbSet<StaffSchedule> StaffSchedules { get; set; }
     public DbSet<Appointment> Appointments { get; set; }
     public DbSet<AppointmentStatusHistory> AppointmentStatusHistories { get; set; }
-    public DbSet<AppointmentServiceItem> AppointmentServiceItems { get; set; }
 
-    // Chat & Support
-    public DbSet<ChatSession> ChatSessions { get; set; }
-    public DbSet<ChatMessage> ChatMessages { get; set; }
-    public DbSet<FaqItem> FaqItems { get; set; }
-
-    // Reviews & Notifications
-    public DbSet<ProductReview> ProductReviews { get; set; }
-    public DbSet<ServiceReview> ServiceReviews { get; set; }
+    // Notifications
     public DbSet<Notification> Notifications { get; set; }
-
-    // Subscriptions & AI
-    public DbSet<SubscriptionPackage> SubscriptionPackages { get; set; }
-    public DbSet<UserSubscription> UserSubscriptions { get; set; }
-    public DbSet<AIHealthAnalysis> AIHealthAnalyses { get; set; }
 
     // Payments
     public DbSet<Payment> Payments { get; set; }
@@ -60,17 +39,12 @@ public class PetCareDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Set default schema
         modelBuilder.HasDefaultSchema("petcare");
 
-        // Configure entities
         ConfigureUserEntities(modelBuilder);
-        ConfigurePetEntities(modelBuilder);
         ConfigureProductEntities(modelBuilder);
         ConfigureServiceEntities(modelBuilder);
-        ConfigureChatEntities(modelBuilder);
-        ConfigureReviewEntities(modelBuilder);
-        ConfigureSubscriptionEntities(modelBuilder);
+        ConfigureNotificationEntities(modelBuilder);
         ConfigurePaymentEntities(modelBuilder);
     }
 
@@ -115,50 +89,6 @@ public class PetCareDbContext : DbContext
         });
     }
 
-    private void ConfigurePetEntities(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<HealthRecord>(entity =>
-        {
-            entity.ToTable("health_records");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PetId).HasColumnName("pet_id");
-            entity.Property(e => e.RecordDate).HasColumnName("record_date");
-            entity.Property(e => e.Weight).HasColumnName("weight").HasPrecision(5, 2);
-            entity.Property(e => e.Height).HasColumnName("height").HasPrecision(5, 2);
-            entity.Property(e => e.Temperature).HasColumnName("temperature").HasPrecision(4, 2);
-            entity.Property(e => e.HeartRate).HasColumnName("heart_rate");
-            entity.Property(e => e.Diagnosis).HasColumnName("diagnosis");
-            entity.Property(e => e.Treatment).HasColumnName("treatment");
-            entity.Property(e => e.Notes).HasColumnName("notes");
-            entity.Property(e => e.RecordedBy).HasColumnName("recorded_by");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.RecordedByUser)
-                .WithMany()
-                .HasForeignKey(e => e.RecordedBy)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.PetId);
-        });
-
-        modelBuilder.Entity<HealthReminder>(entity =>
-        {
-            entity.ToTable("health_reminders");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PetId).HasColumnName("pet_id");
-            entity.Property(e => e.ReminderType).HasColumnName("reminder_type").IsRequired().HasMaxLength(50);
-            entity.Property(e => e.ReminderTitle).HasColumnName("reminder_title").IsRequired().HasMaxLength(255);
-            entity.Property(e => e.ReminderDate).HasColumnName("reminder_date");
-            entity.Property(e => e.IsCompleted).HasColumnName("is_completed");
-            entity.Property(e => e.Notes).HasColumnName("notes");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasIndex(e => e.PetId);
-        });
-    }
-
     private void ConfigureProductEntities(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ProductCategory>(entity =>
@@ -180,8 +110,6 @@ public class PetCareDbContext : DbContext
                 .HasForeignKey(e => e.ParentCategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
-
-
 
         modelBuilder.Entity<Product>(entity =>
         {
@@ -206,8 +134,6 @@ public class PetCareDbContext : DbContext
                 .WithMany(c => c.Products)
                 .HasForeignKey(e => e.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-
 
             entity.HasIndex(e => e.Sku).IsUnique();
             entity.HasIndex(e => e.CategoryId);
@@ -276,7 +202,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.Notes).HasColumnName("notes");
             entity.Property(e => e.OrderedAt).HasColumnName("ordered_at");
 
-            // Production orders table currently does not include created_at/updated_at.
             entity.Ignore(e => e.CreatedAt);
             entity.Ignore(e => e.UpdatedAt);
 
@@ -342,37 +267,11 @@ public class PetCareDbContext : DbContext
 
     private void ConfigureServiceEntities(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Branch>(entity =>
-        {
-            entity.ToTable("branches");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.BranchName).HasColumnName("branch_name").IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Address).HasColumnName("address").IsRequired();
-            entity.Property(e => e.Phone).HasColumnName("phone").HasMaxLength(20);
-            entity.Property(e => e.Email).HasColumnName("email").HasMaxLength(255);
-            entity.Property(e => e.OpeningHours).HasColumnName("opening_hours");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-        });
-
-        modelBuilder.Entity<ServiceCategory>(entity =>
-        {
-            entity.ToTable("service_categories");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.CategoryName).HasColumnName("category_name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Description).HasColumnName("description");
-            entity.Property(e => e.IconUrl).HasColumnName("icon_url");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-        });
-
         modelBuilder.Entity<Service>(entity =>
         {
             entity.ToTable("services");
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.CategoryId).HasColumnName("category_id");
             entity.Property(e => e.ServiceName).HasColumnName("service_name").IsRequired().HasMaxLength(255);
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes");
@@ -380,11 +279,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.IsHomeService).HasColumnName("is_home_service");
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Category)
-                .WithMany(c => c.Services)
-                .HasForeignKey(e => e.CategoryId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<StaffService>(entity =>
@@ -409,30 +303,6 @@ public class PetCareDbContext : DbContext
             entity.HasIndex(e => new { e.UserId, e.ServiceId }).IsUnique();
         });
 
-        modelBuilder.Entity<StaffSchedule>(entity =>
-        {
-            entity.ToTable("staff_schedules");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.BranchId).HasColumnName("branch_id");
-            entity.Property(e => e.WorkDate).HasColumnName("work_date");
-            entity.Property(e => e.StartTime).HasColumnName("start_time");
-            entity.Property(e => e.EndTime).HasColumnName("end_time");
-            entity.Property(e => e.IsAvailable).HasColumnName("is_available");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Branch)
-                .WithMany(b => b.StaffSchedules)
-                .HasForeignKey(e => e.BranchId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
         modelBuilder.Entity<Appointment>(entity =>
         {
             entity.ToTable("appointments");
@@ -443,7 +313,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.ServiceId).HasColumnName("service_id");
             entity.Property(e => e.AppointmentType).HasColumnName("appointment_type").IsRequired().HasMaxLength(50);
             entity.Property(e => e.AppointmentStatus).HasColumnName("appointment_status").HasMaxLength(50);
-            entity.Property(e => e.BranchId).HasColumnName("branch_id");
             entity.Property(e => e.AssignedStaffId).HasColumnName("assigned_staff_id");
             entity.Property(e => e.AppointmentDate).HasColumnName("appointment_date");
             entity.Property(e => e.StartTime).HasColumnName("start_time");
@@ -470,11 +339,6 @@ public class PetCareDbContext : DbContext
                 .HasForeignKey(e => e.ServiceId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasOne(e => e.Branch)
-                .WithMany(b => b.Appointments)
-                .HasForeignKey(e => e.BranchId)
-                .OnDelete(DeleteBehavior.Restrict);
-
             entity.HasOne(e => e.AssignedStaff)
                 .WithMany()
                 .HasForeignKey(e => e.AssignedStaffId)
@@ -483,31 +347,6 @@ public class PetCareDbContext : DbContext
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.AppointmentDate);
             entity.HasIndex(e => e.CheckInCode);
-        });
-
-        modelBuilder.Entity<AppointmentServiceItem>(entity =>
-        {
-            entity.ToTable("appointment_service_items");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.AppointmentId).HasColumnName("appointment_id");
-            entity.Property(e => e.ServiceId).HasColumnName("service_id");
-            entity.Property(e => e.Quantity).HasColumnName("quantity");
-            entity.Property(e => e.UnitPrice).HasColumnName("unit_price").HasPrecision(10, 2);
-            entity.Property(e => e.LineTotal).HasColumnName("line_total").HasPrecision(10, 2);
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Appointment)
-                .WithMany(a => a.AppointmentServiceItems)
-                .HasForeignKey(e => e.AppointmentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Service)
-                .WithMany(s => s.AppointmentServiceItems)
-                .HasForeignKey(e => e.ServiceId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.AppointmentId);
         });
 
         modelBuilder.Entity<AppointmentStatusHistory>(entity =>
@@ -535,134 +374,8 @@ public class PetCareDbContext : DbContext
         });
     }
 
-    private void ConfigureChatEntities(ModelBuilder modelBuilder)
+    private void ConfigureNotificationEntities(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<ChatSession>(entity =>
-        {
-            entity.ToTable("chat_sessions");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.SessionStart).HasColumnName("session_start");
-            entity.Property(e => e.SessionEnd).HasColumnName("session_end");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.User)
-                .WithMany(u => u.ChatSessions)
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.UserId);
-        });
-
-        modelBuilder.Entity<ChatMessage>(entity =>
-        {
-            entity.ToTable("chat_messages");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.SessionId).HasColumnName("session_id");
-            entity.Property(e => e.SenderType).HasColumnName("sender_type").IsRequired().HasMaxLength(20);
-            entity.Property(e => e.MessageText).HasColumnName("message_text").IsRequired();
-            entity.Property(e => e.MessageMetadata).HasColumnName("message_metadata");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Session)
-                .WithMany(s => s.Messages)
-                .HasForeignKey(e => e.SessionId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => e.SessionId);
-        });
-
-        modelBuilder.Entity<FaqItem>(entity =>
-        {
-            entity.ToTable("faq_items");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.Question).HasColumnName("question").IsRequired();
-            entity.Property(e => e.Answer).HasColumnName("answer").IsRequired();
-            entity.Property(e => e.Category).HasColumnName("category").HasMaxLength(100);
-            entity.Property(e => e.Keywords).HasColumnName("keywords");
-            entity.Property(e => e.UsageCount).HasColumnName("usage_count");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-        });
-    }
-
-    private void ConfigureReviewEntities(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<ProductReview>(entity =>
-        {
-            entity.ToTable("product_reviews");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.ProductId).HasColumnName("product_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.OrderId).HasColumnName("order_id");
-            entity.Property(e => e.Rating).HasColumnName("rating");
-            entity.Property(e => e.ReviewText).HasColumnName("review_text");
-            entity.Property(e => e.Images).HasColumnName("images");
-            entity.Property(e => e.IsVerifiedPurchase).HasColumnName("is_verified_purchase");
-            entity.Property(e => e.IsApproved).HasColumnName("is_approved");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Product)
-                .WithMany(p => p.Reviews)
-                .HasForeignKey(e => e.ProductId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Order)
-                .WithMany(o => o.Reviews)
-                .HasForeignKey(e => e.OrderId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.ProductId);
-        });
-
-        modelBuilder.Entity<ServiceReview>(entity =>
-        {
-            entity.ToTable("service_reviews");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.AppointmentId).HasColumnName("appointment_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.ServiceId).HasColumnName("service_id");
-            entity.Property(e => e.StaffId).HasColumnName("staff_id");
-            entity.Property(e => e.Rating).HasColumnName("rating");
-            entity.Property(e => e.ReviewText).HasColumnName("review_text");
-            entity.Property(e => e.IsApproved).HasColumnName("is_approved");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Appointment)
-                .WithMany(a => a.Reviews)
-                .HasForeignKey(e => e.AppointmentId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Service)
-                .WithMany(s => s.Reviews)
-                .HasForeignKey(e => e.ServiceId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Staff)
-                .WithMany()
-                .HasForeignKey(e => e.StaffId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.AppointmentId);
-        });
-
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.ToTable("notifications");
@@ -683,99 +396,6 @@ public class PetCareDbContext : DbContext
 
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => new { e.UserId, e.IsRead }).HasFilter("is_read = false");
-        });
-    }
-
-    private void ConfigureSubscriptionEntities(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<SubscriptionPackage>(entity =>
-        {
-            entity.ToTable("subscription_packages");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.Name).HasColumnName("name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Description).HasColumnName("description").IsRequired();
-            entity.Property(e => e.Price).HasColumnName("price").HasPrecision(10, 2);
-            entity.Property(e => e.BillingCycle).HasColumnName("billing_cycle").IsRequired().HasMaxLength(20);
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.HasAIHealthTracking).HasColumnName("has_ai_health_tracking");
-            entity.Property(e => e.HasVaccinationTracking).HasColumnName("has_vaccination_tracking");
-            entity.Property(e => e.HasHealthReminders).HasColumnName("has_health_reminders");
-            entity.Property(e => e.HasAIRecommendations).HasColumnName("has_ai_recommendations");
-            entity.Property(e => e.HasNutritionalAnalysis).HasColumnName("has_nutritional_analysis");
-            entity.Property(e => e.HasEarlyDiseaseDetection).HasColumnName("has_early_disease_detection");
-            entity.Property(e => e.HasPrioritySupport).HasColumnName("has_priority_support");
-            entity.Property(e => e.MaxPets).HasColumnName("max_pets");
-            entity.Property(e => e.Features).HasColumnName("features");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-        });
-
-        modelBuilder.Entity<UserSubscription>(entity =>
-        {
-            entity.ToTable("user_subscriptions");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.SubscriptionPackageId).HasColumnName("subscription_package_id");
-            entity.Property(e => e.StartDate).HasColumnName("start_date");
-            entity.Property(e => e.EndDate).HasColumnName("end_date");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.Status).HasColumnName("status").IsRequired().HasMaxLength(20);
-            entity.Property(e => e.NextBillingDate).HasColumnName("next_billing_date");
-            entity.Property(e => e.AmountPaid).HasColumnName("amount_paid").HasPrecision(10, 2);
-            entity.Property(e => e.PaymentMethod).HasColumnName("payment_method").HasMaxLength(50);
-            entity.Property(e => e.TransactionId).HasColumnName("transaction_id").HasMaxLength(100);
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-
-            entity.HasOne(e => e.User)
-                .WithMany(u => u.UserSubscriptions)
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.SubscriptionPackage)
-                .WithMany(sp => sp.UserSubscriptions)
-                .HasForeignKey(e => e.SubscriptionPackageId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => new { e.UserId, e.IsActive });
-        });
-
-        modelBuilder.Entity<AIHealthAnalysis>(entity =>
-        {
-            entity.ToTable("ai_health_analyses");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PetId).HasColumnName("pet_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.AnalysisType).HasColumnName("analysis_type").IsRequired().HasMaxLength(50);
-            entity.Property(e => e.InputData).HasColumnName("input_data").IsRequired();
-            entity.Property(e => e.AIResponse).HasColumnName("ai_response").IsRequired();
-            entity.Property(e => e.Recommendations).HasColumnName("recommendations");
-            entity.Property(e => e.ConfidenceScore).HasColumnName("confidence_score").HasPrecision(5, 2);
-            entity.Property(e => e.TokensUsed).HasColumnName("tokens_used");
-            entity.Property(e => e.AIModel).HasColumnName("ai_model").HasMaxLength(50);
-            entity.Property(e => e.IsReviewed).HasColumnName("is_reviewed");
-            entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
-            entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
-            entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.User)
-                .WithMany(u => u.AIHealthAnalyses)
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Reviewer)
-                .WithMany()
-                .HasForeignKey(e => e.ReviewedBy)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.PetId);
-            entity.HasIndex(e => e.UserId);
-            entity.HasIndex(e => new { e.PetId, e.AnalysisType });
         });
     }
 
@@ -831,7 +451,7 @@ public class PetCareDbContext : DbContext
     private void UpdateAuditFields()
     {
         var entries = ChangeTracker.Entries()
-            .Where(e => e.Entity is AuditableEntity && (e.State == EntityState.Modified));
+            .Where(e => e.Entity is AuditableEntity && e.State == EntityState.Modified);
 
         foreach (var entry in entries)
         {

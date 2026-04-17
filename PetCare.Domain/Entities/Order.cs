@@ -23,5 +23,4 @@ public class Order : AuditableEntity
     public virtual User User { get; set; } = null!;
     public virtual ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();
     public virtual ICollection<OrderStatusHistory> StatusHistory { get; set; } = new List<OrderStatusHistory>();
-    public virtual ICollection<ProductReview> Reviews { get; set; } = new List<ProductReview>();
 }

@@ -154,8 +154,6 @@ builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IProductCategoryService, ProductCategoryService>();
-builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
-builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 
 // Resend email service
@@ -171,9 +169,7 @@ builder.Services.Configure<ResendClientOptions>(options =>
 builder.Services.AddTransient<IResend, ResendClient>();
 builder.Services.AddScoped<PetCare.Domain.Interfaces.IEmailService, ResendEmailService>();
 
-// Add HttpClient for AI services
 builder.Services.AddHttpClient();
-builder.Services.AddHttpClient("GeminiClient");
 
 // Image upload service - Switch between Cloudinary and Local storage
 var useCloudinary = Environment.GetEnvironmentVariable("USE_CLOUDINARY") == "true" 

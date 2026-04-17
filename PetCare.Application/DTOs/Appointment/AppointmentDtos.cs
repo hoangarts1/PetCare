@@ -12,8 +12,6 @@ public class CreateAppointmentDto
     [StringLength(50)]
     public string AppointmentType { get; set; } = string.Empty;
     
-    public Guid? BranchId { get; set; }
-    
     [Required]
     public DateTime AppointmentDate { get; set; }
     
@@ -31,7 +29,6 @@ public class UpdateAppointmentDto
     public string? Pet { get; set; }
     public Guid? ServiceId { get; set; }
     public string? AppointmentType { get; set; }
-    public Guid? BranchId { get; set; }
     public DateTime? AppointmentDate { get; set; }
     public TimeSpan? StartTime { get; set; }
     public TimeSpan? EndTime { get; set; }
@@ -49,8 +46,6 @@ public class AppointmentResponseDto
     public decimal? ServicePrice { get; set; }
     public string AppointmentType { get; set; } = string.Empty;
     public string AppointmentStatus { get; set; } = string.Empty;
-    public Guid? BranchId { get; set; }
-    public string? BranchName { get; set; }
     public Guid? AssignedStaffId { get; set; }
     public string? AssignedStaffName { get; set; }
     public DateTime AppointmentDate { get; set; }
@@ -64,7 +59,6 @@ public class AppointmentResponseDto
     public DateTime? CompletedAt { get; set; }
     public string? BillNumber { get; set; }
     public decimal? TotalAmount { get; set; }
-    public List<AppointmentServiceItemResponseDto> SelectedServices { get; set; } = new();
     public List<AppointmentStatusHistoryDto> StatusHistory { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -95,20 +89,7 @@ public class CheckInAppointmentDto
 
 public class StartAppointmentServiceDto
 {
-    [Required]
-    [MinLength(1)]
-    public List<AppointmentServiceSelectionDto> Services { get; set; } = new();
-
     public string? Notes { get; set; }
-}
-
-public class AppointmentServiceSelectionDto
-{
-    [Required]
-    public Guid ServiceId { get; set; }
-
-    [Range(1, 100)]
-    public int Quantity { get; set; } = 1;
 }
 
 public class CompleteAppointmentDto
@@ -139,7 +120,6 @@ public class AppointmentBillDto
     public DateTime BillDate { get; set; }
     public string CustomerName { get; set; } = string.Empty;
     public string? Pet { get; set; }
-    public string BranchName { get; set; } = string.Empty;
     public List<AppointmentServiceItemResponseDto> Items { get; set; } = new();
     public decimal TotalAmount { get; set; }
 }
@@ -151,5 +131,4 @@ public class ServiceListItemDto
     public string? Description { get; set; }
     public decimal Price { get; set; }
     public int DurationMinutes { get; set; }
-    public string? CategoryName { get; set; }
 }

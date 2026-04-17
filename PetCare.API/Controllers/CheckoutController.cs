@@ -350,15 +350,8 @@ public class CheckoutController : ControllerBase
 
     private async Task<bool> HasActiveMembershipAsync(Guid userId)
     {
-        return await _context.UserSubscriptions
-            .AsNoTracking()
-            .Include(s => s.SubscriptionPackage)
-            .AnyAsync(s =>
-                s.UserId == userId
-                && s.IsActive
-                && s.Status == "Active"
-                && s.SubscriptionPackage.Price > 0
-                && (s.EndDate == null || s.EndDate > DateTime.UtcNow));
+        await Task.CompletedTask;
+        return false;
     }
 
     [HttpPost("confirm-payment")]
