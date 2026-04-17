@@ -37,7 +37,6 @@ public class CartController : ControllerBase
                 ProductId = c.ProductId,
                 ProductName = c.Product.ProductName,
                 Price = c.Product.Price,
-                SalePrice = c.Product.SalePrice,
                 Quantity = c.Quantity,
                 StockQuantity = c.Product.StockQuantity,
                 ImageUrl = c.Product.Images
