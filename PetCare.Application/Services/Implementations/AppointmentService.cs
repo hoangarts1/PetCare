@@ -225,18 +225,10 @@ public class AppointmentService : IAppointmentService
                     return ServiceResult<AppointmentResponseDto>.FailureResult("Dịch vụ tại nhà đã bị tắt. Vui lòng đặt lịch tại trung tâm.");
             }
 
-            // Validate pet belongs to user if provided
-            if (dto.PetId.HasValue)
-            {
-                var pet = await _unitOfWork.Pets.GetByIdAsync(dto.PetId.Value);
-                if (pet == null || pet.UserId != userId)
-                    return ServiceResult<AppointmentResponseDto>.FailureResult("Pet not found or does not belong to you");
-            }
-
             var appointment = new Appointment
             {
                 UserId = userId,
-                PetId = dto.PetId,
+                Pet = string.IsNullOrWhiteSpace(dto.Pet) ? null : dto.Pet.Trim(),
                 ServiceId = dto.ServiceId,
                 AppointmentType = dto.AppointmentType,
                 AppointmentStatus = "pending",
@@ -736,7 +728,7 @@ public class AppointmentService : IAppointmentService
             BillNumber = appointment.BillNumber ?? GenerateBillNumber(appointment.Id),
             BillDate = appointment.CompletedAt ?? appointment.UpdatedAt ?? DateTime.UtcNow,
             CustomerName = appointment.User?.FullName ?? string.Empty,
-            PetName = appointment.Pet?.PetName,
+            Pet = appointment.Pet,
             BranchName = appointment.Branch?.BranchName ?? "PetCare Center",
             Items = items,
             TotalAmount = total
@@ -751,8 +743,7 @@ public class AppointmentService : IAppointmentService
         Id = a.Id,
         UserId = a.UserId,
         UserName = a.User?.FullName ?? string.Empty,
-        PetId = a.PetId,
-        PetName = a.Pet?.PetName,
+        Pet = a.Pet,
         ServiceId = a.ServiceId,
         ServiceName = a.Service?.ServiceName,
         ServicePrice = a.Service?.Price,

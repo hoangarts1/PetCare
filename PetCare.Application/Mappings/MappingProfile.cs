@@ -1,10 +1,8 @@
 using AutoMapper;
 using PetCare.Application.DTOs.User;
-using PetCare.Application.DTOs.Pet;
 using PetCare.Application.DTOs.Product;
 using PetCare.Application.DTOs.Order;
 using PetCare.Application.DTOs.Appointment;
-using PetCare.Application.DTOs.Blog;
 using PetCare.Application.DTOs.Category;
 using PetCare.Application.DTOs.Service;
 using PetCare.Application.DTOs.Subscription;
@@ -28,21 +26,6 @@ public class MappingProfile : Profile
         CreateMap<UpdateUserDto, User>()
             .ForAllMembers(opts => opts.Condition((src, dest, srcMember) => srcMember != null));
 
-        // Pet mappings
-        CreateMap<Pet, PetDto>()
-            .ForMember(dest => dest.SpeciesName, opt => opt.MapFrom(src => src.Species != null ? src.Species.SpeciesName : null))
-            .ForMember(dest => dest.BreedName, opt => opt.MapFrom(src => src.Breed != null ? src.Breed.BreedName : null));
-        CreateMap<CreatePetDto, Pet>();
-        CreateMap<UpdatePetDto, Pet>()
-            .ForAllMembers(opts => opts.Condition((src, dest, srcMember) => srcMember != null));
-
-        // Pet Species and Breed mappings
-        CreateMap<PetSpecies, PetSpeciesDto>();
-        CreateMap<PetBreed, PetBreedDto>()
-            .ForMember(dest => dest.SpeciesName, opt => opt.MapFrom(src => src.Species != null ? src.Species.SpeciesName : null));
-        CreateMap<PetSpecies, SpeciesWithBreedsDto>()
-            .ForMember(dest => dest.Breeds, opt => opt.MapFrom(src => src.Breeds));
-
         // Product mappings
         CreateMap<Product, ProductDto>()
             .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category != null ? src.Category.CategoryName : null))
@@ -60,16 +43,10 @@ public class MappingProfile : Profile
 
         // Appointment mappings
         CreateMap<Appointment, AppointmentDto>()
-            .ForMember(dest => dest.PetName, opt => opt.MapFrom(src => src.Pet != null ? src.Pet.PetName : null))
+            .ForMember(dest => dest.Pet, opt => opt.MapFrom(src => src.Pet))
             .ForMember(dest => dest.ServiceName, opt => opt.MapFrom(src => src.Service != null ? src.Service.ServiceName : null))
             .ForMember(dest => dest.BranchName, opt => opt.MapFrom(src => src.Branch != null ? src.Branch.BranchName : null))
             .ForMember(dest => dest.StaffName, opt => opt.MapFrom(src => src.AssignedStaff != null ? src.AssignedStaff.FullName : null));
-
-        // Blog mappings
-        CreateMap<BlogPost, BlogPostDto>()
-            .ForMember(dest => dest.AuthorName, opt => opt.MapFrom(src => src.Author != null ? src.Author.FullName : null))
-            .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category != null ? src.Category.CategoryName : null))
-            .ForMember(dest => dest.Tags, opt => opt.MapFrom(src => src.BlogPostTags.Select(pt => pt.Tag.TagName).ToList()));
 
         // Product Category mappings
         CreateMap<ProductCategory, ProductCategoryDto>();
@@ -97,7 +74,7 @@ public class MappingProfile : Profile
 
         // Health tracking mappings
         CreateMap<HealthRecord, HealthRecordDto>()
-            .ForMember(dest => dest.PetName, opt => opt.MapFrom(src => src.Pet != null ? src.Pet.PetName : null))
+            .ForMember(dest => dest.PetName, opt => opt.Ignore())
             .ForMember(dest => dest.RecordedByName, opt => opt.MapFrom(src => src.RecordedByUser != null ? src.RecordedByUser.FullName : null));
         CreateMap<CreateHealthRecordDto, HealthRecord>();
 

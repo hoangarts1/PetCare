@@ -7,11 +7,9 @@ public interface IUnitOfWork : IDisposable
 {
     // Repositories
     IUserRepository Users { get; }
-    IPetRepository Pets { get; }
     IProductRepository Products { get; }
     IOrderRepository Orders { get; }
     IAppointmentRepository Appointments { get; }
-    IBlogPostRepository BlogPosts { get; }
     IServiceRepository Services { get; }
     
     // Generic repository access

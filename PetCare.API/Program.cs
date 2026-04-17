@@ -144,23 +144,17 @@ builder.Services.AddAutoMapper(typeof(PetCare.Application.Mappings.MappingProfil
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IUserRepository, UserRepository>();
-builder.Services.AddScoped<IPetRepository, PetRepository>();
 builder.Services.AddScoped<IProductRepository, ProductRepository>();
 builder.Services.AddScoped<IOrderRepository, OrderRepository>();
 builder.Services.AddScoped<IAppointmentRepository, AppointmentRepository>();
-builder.Services.AddScoped<IBlogPostRepository, BlogPostRepository>();
 builder.Services.AddScoped<IServiceRepository, ServiceRepository>();
 
 // Register services
 builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IPetService, PetService>();
 builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IProductCategoryService, ProductCategoryService>();
-builder.Services.AddScoped<IHealthRecordService, HealthRecordService>();
-builder.Services.AddScoped<IAIHealthService, AIHealthService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
-builder.Services.AddScoped<IBlogService, BlogService>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IAppointmentService, AppointmentService>();
 

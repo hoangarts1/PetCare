@@ -4,7 +4,7 @@ namespace PetCare.Application.DTOs.Appointment;
 
 public class CreateAppointmentDto
 {
-    public Guid? PetId { get; set; }
+    public string? Pet { get; set; }
 
     public Guid? ServiceId { get; set; }
     
@@ -28,7 +28,7 @@ public class CreateAppointmentDto
 
 public class UpdateAppointmentDto
 {
-    public Guid? PetId { get; set; }
+    public string? Pet { get; set; }
     public Guid? ServiceId { get; set; }
     public string? AppointmentType { get; set; }
     public Guid? BranchId { get; set; }
@@ -43,8 +43,7 @@ public class AppointmentResponseDto
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string UserName { get; set; } = string.Empty;
-    public Guid? PetId { get; set; }
-    public string? PetName { get; set; }
+    public string? Pet { get; set; }
     public Guid? ServiceId { get; set; }
     public string? ServiceName { get; set; }
     public decimal? ServicePrice { get; set; }
@@ -139,7 +138,7 @@ public class AppointmentBillDto
     public string BillNumber { get; set; } = string.Empty;
     public DateTime BillDate { get; set; }
     public string CustomerName { get; set; } = string.Empty;
-    public string? PetName { get; set; }
+    public string? Pet { get; set; }
     public string BranchName { get; set; } = string.Empty;
     public List<AppointmentServiceItemResponseDto> Items { get; set; } = new();
     public decimal TotalAmount { get; set; }

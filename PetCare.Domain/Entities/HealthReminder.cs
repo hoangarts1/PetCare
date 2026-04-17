@@ -11,6 +11,4 @@ public class HealthReminder : BaseEntity
     public bool IsCompleted { get; set; } = false;
     public string? Notes { get; set; }
 
-    // Navigation properties
-    public virtual Pet Pet { get; set; } = null!;
 }

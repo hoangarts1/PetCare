@@ -14,10 +14,7 @@ public class PetCareDbContext : DbContext
     public DbSet<Role> Roles { get; set; }
     public DbSet<User> Users { get; set; }
 
-    // Pet Management
-    public DbSet<PetSpecies> PetSpecies { get; set; }
-    public DbSet<PetBreed> PetBreeds { get; set; }
-    public DbSet<Pet> Pets { get; set; }
+    // Health Management
     public DbSet<HealthRecord> HealthRecords { get; set; }
     public DbSet<HealthReminder> HealthReminders { get; set; }
 
@@ -40,14 +37,6 @@ public class PetCareDbContext : DbContext
     public DbSet<Appointment> Appointments { get; set; }
     public DbSet<AppointmentStatusHistory> AppointmentStatusHistories { get; set; }
     public DbSet<AppointmentServiceItem> AppointmentServiceItems { get; set; }
-
-    // Blog & Community
-    public DbSet<BlogCategory> BlogCategories { get; set; }
-    public DbSet<BlogPost> BlogPosts { get; set; }
-    public DbSet<Tag> Tags { get; set; }
-    public DbSet<BlogPostTag> BlogPostTags { get; set; }
-    public DbSet<BlogComment> BlogComments { get; set; }
-    public DbSet<BlogLike> BlogLikes { get; set; }
 
     // Chat & Support
     public DbSet<ChatSession> ChatSessions { get; set; }
@@ -79,7 +68,6 @@ public class PetCareDbContext : DbContext
         ConfigurePetEntities(modelBuilder);
         ConfigureProductEntities(modelBuilder);
         ConfigureServiceEntities(modelBuilder);
-        ConfigureBlogEntities(modelBuilder);
         ConfigureChatEntities(modelBuilder);
         ConfigureReviewEntities(modelBuilder);
         ConfigureSubscriptionEntities(modelBuilder);
@@ -129,70 +117,6 @@ public class PetCareDbContext : DbContext
 
     private void ConfigurePetEntities(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<PetSpecies>(entity =>
-        {
-            entity.ToTable("pet_species");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.SpeciesName).HasColumnName("species_name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Description).HasColumnName("description");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-        });
-
-        modelBuilder.Entity<PetBreed>(entity =>
-        {
-            entity.ToTable("pet_breeds");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.SpeciesId).HasColumnName("species_id");
-            entity.Property(e => e.BreedName).HasColumnName("breed_name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Characteristics).HasColumnName("characteristics");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Species)
-                .WithMany(s => s.Breeds)
-                .HasForeignKey(e => e.SpeciesId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<Pet>(entity =>
-        {
-            entity.ToTable("pets");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.SpeciesId).HasColumnName("species_id");
-            entity.Property(e => e.BreedId).HasColumnName("breed_id");
-            entity.Property(e => e.PetName).HasColumnName("pet_name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.DateOfBirth).HasColumnName("date_of_birth");
-            entity.Property(e => e.Gender).HasColumnName("gender").HasMaxLength(10);
-            entity.Property(e => e.Weight).HasColumnName("weight").HasPrecision(5, 2);
-            entity.Property(e => e.Color).HasColumnName("color").HasMaxLength(100);
-            entity.Property(e => e.MicrochipId).HasColumnName("microchip_id").HasMaxLength(50);
-            entity.Property(e => e.AvatarUrl).HasColumnName("avatar_url");
-            entity.Property(e => e.SpecialNotes).HasColumnName("special_notes");
-            entity.Property(e => e.IsActive).HasColumnName("is_active");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-
-            entity.HasOne(e => e.User)
-                .WithMany(u => u.Pets)
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Species)
-                .WithMany(s => s.Pets)
-                .HasForeignKey(e => e.SpeciesId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Breed)
-                .WithMany(b => b.Pets)
-                .HasForeignKey(e => e.BreedId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.UserId);
-        });
-
         modelBuilder.Entity<HealthRecord>(entity =>
         {
             entity.ToTable("health_records");
@@ -209,11 +133,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.Notes).HasColumnName("notes");
             entity.Property(e => e.RecordedBy).HasColumnName("recorded_by");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Pet)
-                .WithMany(p => p.HealthRecords)
-                .HasForeignKey(e => e.PetId)
-                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(e => e.RecordedByUser)
                 .WithMany()
@@ -235,11 +154,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.IsCompleted).HasColumnName("is_completed");
             entity.Property(e => e.Notes).HasColumnName("notes");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Pet)
-                .WithMany(p => p.HealthReminders)
-                .HasForeignKey(e => e.PetId)
-                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(e => e.PetId);
         });
@@ -525,7 +439,7 @@ public class PetCareDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.PetId).HasColumnName("pet_id");
+            entity.Property(e => e.Pet).HasColumnName("pet").HasMaxLength(100);
             entity.Property(e => e.ServiceId).HasColumnName("service_id");
             entity.Property(e => e.AppointmentType).HasColumnName("appointment_type").IsRequired().HasMaxLength(50);
             entity.Property(e => e.AppointmentStatus).HasColumnName("appointment_status").HasMaxLength(50);
@@ -549,11 +463,6 @@ public class PetCareDbContext : DbContext
             entity.HasOne(e => e.User)
                 .WithMany(u => u.Appointments)
                 .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Pet)
-                .WithMany(p => p.Appointments)
-                .HasForeignKey(e => e.PetId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.Service)
@@ -623,142 +532,6 @@ public class PetCareDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.AppointmentId);
-        });
-    }
-
-    private void ConfigureBlogEntities(ModelBuilder modelBuilder)
-    {
-        modelBuilder.Entity<BlogCategory>(entity =>
-        {
-            entity.ToTable("blog_categories");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.CategoryName).HasColumnName("category_name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Slug).HasColumnName("slug").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.Description).HasColumnName("description");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasIndex(e => e.Slug).IsUnique();
-        });
-
-        modelBuilder.Entity<BlogPost>(entity =>
-        {
-            entity.ToTable("blog_posts");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.AuthorId).HasColumnName("author_id");
-            entity.Property(e => e.CategoryId).HasColumnName("category_id");
-            entity.Property(e => e.Title).HasColumnName("title").IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Slug).HasColumnName("slug").IsRequired().HasMaxLength(255);
-            entity.Property(e => e.Content).HasColumnName("content").IsRequired();
-            entity.Property(e => e.FeaturedImageUrl).HasColumnName("featured_image_url");
-            entity.Property(e => e.Excerpt).HasColumnName("excerpt");
-            entity.Property(e => e.Status).HasColumnName("status").HasMaxLength(50);
-            entity.Property(e => e.ViewCount).HasColumnName("view_count");
-            entity.Property(e => e.PublishedAt).HasColumnName("published_at");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-
-            entity.HasOne(e => e.Author)
-                .WithMany(u => u.BlogPosts)
-                .HasForeignKey(e => e.AuthorId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Category)
-                .WithMany(c => c.BlogPosts)
-                .HasForeignKey(e => e.CategoryId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.Slug).IsUnique();
-            entity.HasIndex(e => e.Status);
-        });
-
-        modelBuilder.Entity<Tag>(entity =>
-        {
-            entity.ToTable("tags");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.TagName).HasColumnName("tag_name").IsRequired().HasMaxLength(50);
-            entity.Property(e => e.Slug).HasColumnName("slug").IsRequired().HasMaxLength(50);
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasIndex(e => e.TagName).IsUnique();
-            entity.HasIndex(e => e.Slug).IsUnique();
-        });
-
-        modelBuilder.Entity<BlogPostTag>(entity =>
-        {
-            entity.ToTable("blog_post_tags");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PostId).HasColumnName("post_id");
-            entity.Property(e => e.TagId).HasColumnName("tag_id");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Post)
-                .WithMany(p => p.BlogPostTags)
-                .HasForeignKey(e => e.PostId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.Tag)
-                .WithMany(t => t.BlogPostTags)
-                .HasForeignKey(e => e.TagId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => new { e.PostId, e.TagId }).IsUnique();
-        });
-
-        modelBuilder.Entity<BlogComment>(entity =>
-        {
-            entity.ToTable("blog_comments");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PostId).HasColumnName("post_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.ParentCommentId).HasColumnName("parent_comment_id");
-            entity.Property(e => e.CommentText).HasColumnName("comment_text").IsRequired();
-            entity.Property(e => e.IsApproved).HasColumnName("is_approved");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-
-            entity.HasOne(e => e.Post)
-                .WithMany(p => p.Comments)
-                .HasForeignKey(e => e.PostId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.ParentComment)
-                .WithMany(c => c.Replies)
-                .HasForeignKey(e => e.ParentCommentId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(e => e.PostId);
-        });
-
-        modelBuilder.Entity<BlogLike>(entity =>
-        {
-            entity.ToTable("blog_likes");
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("id");
-            entity.Property(e => e.PostId).HasColumnName("post_id");
-            entity.Property(e => e.UserId).HasColumnName("user_id");
-            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Post)
-                .WithMany(p => p.Likes)
-                .HasForeignKey(e => e.PostId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.User)
-                .WithMany()
-                .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasIndex(e => new { e.PostId, e.UserId }).IsUnique();
         });
     }
 
@@ -989,11 +762,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
             entity.Property(e => e.ReviewNotes).HasColumnName("review_notes");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
-
-            entity.HasOne(e => e.Pet)
-                .WithMany(p => p.AIHealthAnalyses)
-                .HasForeignKey(e => e.PetId)
-                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasOne(e => e.User)
                 .WithMany(u => u.AIHealthAnalyses)

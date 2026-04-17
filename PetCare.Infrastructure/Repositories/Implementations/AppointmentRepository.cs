@@ -14,7 +14,6 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     public async Task<IEnumerable<Appointment>> GetAppointmentsByUserIdAsync(Guid userId)
     {
         return await _dbSet
-            .Include(a => a.Pet)
             .Include(a => a.Service)
             .Include(a => a.AppointmentServiceItems)
                 .ThenInclude(i => i.Service)
@@ -30,7 +29,6 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         return await _dbSet
             .Include(a => a.User)
-            .Include(a => a.Pet)
             .Include(a => a.Service)
             .Include(a => a.AssignedStaff)
             .Where(a => a.AppointmentDate.Date == date.Date)
@@ -42,7 +40,6 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         return await _dbSet
             .Include(a => a.User)
-            .Include(a => a.Pet)
             .Include(a => a.Service)
             .Include(a => a.AppointmentServiceItems)
                 .ThenInclude(i => i.Service)
@@ -56,7 +53,6 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         return await _dbSet
             .Include(a => a.User)
-            .Include(a => a.Pet)
             .Include(a => a.Service)
             .Where(a => a.AssignedStaffId == staffId && a.AppointmentDate.Date == date.Date)
             .OrderBy(a => a.StartTime)
@@ -67,7 +63,6 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         var query = _dbSet
             .Include(a => a.User)
-            .Include(a => a.Pet)
             .Include(a => a.Service)
             .Include(a => a.AppointmentServiceItems)
                 .ThenInclude(i => i.Service)

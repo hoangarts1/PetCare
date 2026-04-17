@@ -5,7 +5,7 @@ using PetCare.Domain.Common;
 public class Appointment : AuditableEntity
 {
     public Guid UserId { get; set; }
-    public Guid? PetId { get; set; }
+    public string? Pet { get; set; }
     public Guid? ServiceId { get; set; }
     public string AppointmentType { get; set; } = string.Empty;
     public string AppointmentStatus { get; set; } = "pending";
@@ -26,7 +26,6 @@ public class Appointment : AuditableEntity
 
     // Navigation properties
     public virtual User User { get; set; } = null!;
-    public virtual Pet? Pet { get; set; }
     public virtual Service? Service { get; set; }
     public virtual Branch? Branch { get; set; }
     public virtual User? AssignedStaff { get; set; }

@@ -16,6 +16,5 @@ public class HealthRecord : BaseEntity
     public Guid? RecordedBy { get; set; }
 
     // Navigation properties
-    public virtual Pet Pet { get; set; } = null!;
     public virtual User? RecordedByUser { get; set; }
 }

@@ -13,11 +13,9 @@ public class UnitOfWork : IUnitOfWork
 
     // Specific repositories
     private IUserRepository? _userRepository;
-    private IPetRepository? _petRepository;
     private IProductRepository? _productRepository;
     private IOrderRepository? _orderRepository;
     private IAppointmentRepository? _appointmentRepository;
-    private IBlogPostRepository? _blogPostRepository;
     private IServiceRepository? _serviceRepository;
 
     public UnitOfWork(PetCareDbContext context)
@@ -27,11 +25,9 @@ public class UnitOfWork : IUnitOfWork
     }
 
     public IUserRepository Users => _userRepository ??= new UserRepository(_context);
-    public IPetRepository Pets => _petRepository ??= new PetRepository(_context);
     public IProductRepository Products => _productRepository ??= new ProductRepository(_context);
     public IOrderRepository Orders => _orderRepository ??= new OrderRepository(_context);
     public IAppointmentRepository Appointments => _appointmentRepository ??= new AppointmentRepository(_context);
-    public IBlogPostRepository BlogPosts => _blogPostRepository ??= new BlogPostRepository(_context);
     public IServiceRepository Services => _serviceRepository ??= new ServiceRepository(_context);
 
     public IGenericRepository<T> Repository<T>() where T : class

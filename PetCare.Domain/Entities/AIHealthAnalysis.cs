@@ -19,7 +19,6 @@ public class AIHealthAnalysis : BaseEntity
     public string? ReviewNotes { get; set; }
 
     // Navigation properties
-    public virtual Pet Pet { get; set; } = null!;
     public virtual User User { get; set; } = null!;
     public virtual User? Reviewer { get; set; }
 }

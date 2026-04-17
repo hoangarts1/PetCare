@@ -81,11 +81,6 @@ public class AdminDashboardController : ControllerBase
         var activeProducts = await _context.Products.AsNoTracking().CountAsync(p => p.IsActive);
         var lowStockProducts = await _context.Products.AsNoTracking().CountAsync(p => p.IsActive && p.StockQuantity <= 10);
 
-        var totalBlogs = await _context.BlogPosts.AsNoTracking().CountAsync();
-        var publishedBlogs = await _context.BlogPosts.AsNoTracking()
-            .CountAsync(b => b.Status != null && b.Status.ToLower() == "published");
-        var totalBlogViews = await _context.BlogPosts.AsNoTracking().SumAsync(b => (int?)b.ViewCount) ?? 0;
-
         var totalRevenue = await paidOrdersQuery.SumAsync(order => (decimal?)order.FinalAmount) ?? 0m;
         var paidOrders = await paidOrdersQuery.CountAsync();
         var paidRevenueThisMonth = await paidOrdersQuery
@@ -128,45 +123,6 @@ public class AdminDashboardController : ControllerBase
             })
             .ToListAsync();
 
-        var topPosts = await _context.BlogPosts
-            .AsNoTracking()
-            .Include(b => b.Author)
-            .Include(b => b.Category)
-            .OrderByDescending(b => b.ViewCount + (b.Likes.Count * 3))
-            .ThenByDescending(b => b.CreatedAt)
-            .Take(4)
-            .Select(b => new
-            {
-                b.Id,
-                b.Title,
-                b.Status,
-                b.ViewCount,
-                LikeCount = b.Likes.Count,
-                CategoryName = b.Category != null ? b.Category.CategoryName : null,
-                AuthorName = b.Author != null ? b.Author.FullName : null,
-                b.CreatedAt
-            })
-            .ToListAsync();
-
-        var latestPosts = await _context.BlogPosts
-            .AsNoTracking()
-            .Include(b => b.Author)
-            .Include(b => b.Category)
-            .OrderByDescending(b => b.CreatedAt)
-            .Take(4)
-            .Select(b => new
-            {
-                b.Id,
-                b.Title,
-                b.Status,
-                b.ViewCount,
-                LikeCount = b.Likes.Count,
-                CategoryName = b.Category != null ? b.Category.CategoryName : null,
-                AuthorName = b.Author != null ? b.Author.FullName : null,
-                b.CreatedAt
-            })
-            .ToListAsync();
-
         return Ok(new
         {
             success = true,
@@ -181,9 +137,6 @@ public class AdminDashboardController : ControllerBase
                     products = totalProducts,
                     activeProducts,
                     lowStockProducts,
-                    blogs = totalBlogs,
-                    publishedBlogs,
-                    totalBlogViews,
                     totalRevenue,
                     revenueThisMonth = paidRevenueThisMonth,
                     totalOrders,
@@ -191,8 +144,6 @@ public class AdminDashboardController : ControllerBase
                 },
                 recentUsers,
                 lowStockProducts = lowStockProductsList,
-                topPosts,
-                latestPosts,
                 generatedAt = now
             }
         });
