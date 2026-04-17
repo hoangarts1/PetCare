@@ -532,23 +532,57 @@ public class AppointmentService : IAppointmentService
         if (appointment.AppointmentStatus != "checked-in" && appointment.AppointmentStatus != "confirmed")
             return ServiceResult<AppointmentResponseDto>.FailureResult("Lịch chưa ở trạng thái check-in/confirmed");
 
-        if (!appointment.ServiceId.HasValue)
-            return ServiceResult<AppointmentResponseDto>.FailureResult("Lịch hẹn chưa có dịch vụ chính");
+        var requestedServices = (dto.Services ?? new List<StartAppointmentServiceItemDto>())
+            .Where(item => item.ServiceId != Guid.Empty)
+            .GroupBy(item => item.ServiceId)
+            .Select(group => new
+            {
+                ServiceId = group.Key,
+                Quantity = Math.Max(1, group.Sum(item => item.Quantity <= 0 ? 1 : item.Quantity))
+            })
+            .ToList();
 
-        var service = await _unitOfWork.Services.GetByIdAsync(appointment.ServiceId.Value);
-        if (service == null || !service.IsActive)
-            return ServiceResult<AppointmentResponseDto>.FailureResult("Dịch vụ không tồn tại hoặc đã ngừng hoạt động");
+        if (requestedServices.Count == 0 && appointment.ServiceId.HasValue)
+        {
+            requestedServices.Add(new
+            {
+                ServiceId = appointment.ServiceId.Value,
+                Quantity = 1
+            });
+        }
 
-        if (service.IsHomeService)
-            return ServiceResult<AppointmentResponseDto>.FailureResult("Không hỗ trợ dịch vụ tại nhà");
+        if (requestedServices.Count == 0)
+            return ServiceResult<AppointmentResponseDto>.FailureResult("Vui lòng chọn ít nhất 1 dịch vụ");
+
+        var selectedServices = new List<(Service Service, int Quantity)>();
+        foreach (var requested in requestedServices)
+        {
+            var service = await _unitOfWork.Services.GetByIdAsync(requested.ServiceId);
+            if (service == null || !service.IsActive)
+                return ServiceResult<AppointmentResponseDto>.FailureResult("Có dịch vụ không tồn tại hoặc đã ngừng hoạt động");
+
+            if (service.IsHomeService)
+                return ServiceResult<AppointmentResponseDto>.FailureResult("Không hỗ trợ dịch vụ tại nhà");
+
+            selectedServices.Add((service, requested.Quantity));
+        }
+
+        var primaryService = selectedServices[0].Service;
+        var totalAmount = selectedServices.Sum(item => item.Service.Price * item.Quantity);
+        var selectedServiceNames = selectedServices.Select(item => item.Service.ServiceName).ToList();
 
         appointment.AssignedStaffId = staffId;
         appointment.AppointmentStatus = "in-progress";
         appointment.StartedAt = DateTime.UtcNow;
         appointment.UpdatedAt = DateTime.UtcNow;
-        appointment.TotalAmount = service.Price;
+        appointment.ServiceId = primaryService.Id;
+        appointment.TotalAmount = totalAmount;
+
+        var selectedServicesNote = $"Dich vu da chon khi check-in: {string.Join(", ", selectedServiceNames)}";
         if (!string.IsNullOrWhiteSpace(dto.Notes))
-            appointment.Notes = dto.Notes;
+            appointment.Notes = $"{selectedServicesNote}\n{dto.Notes}";
+        else
+            appointment.Notes = selectedServicesNote;
 
         await _unitOfWork.Repository<Appointment>().UpdateAsync(appointment);
 
@@ -557,8 +591,8 @@ public class AppointmentService : IAppointmentService
             AppointmentId = appointment.Id,
             Status = "in-progress",
             Notes = string.IsNullOrWhiteSpace(dto.Notes)
-                ? "Bắt đầu thực hiện dịch vụ"
-                : dto.Notes,
+                ? selectedServicesNote
+                : $"{selectedServicesNote}. {dto.Notes}",
             UpdatedBy = staffId,
             CreatedAt = DateTime.UtcNow
         });

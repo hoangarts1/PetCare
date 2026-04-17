@@ -89,7 +89,17 @@ public class CheckInAppointmentDto
 
 public class StartAppointmentServiceDto
 {
+    public List<StartAppointmentServiceItemDto> Services { get; set; } = new();
     public string? Notes { get; set; }
+}
+
+public class StartAppointmentServiceItemDto
+{
+    [Required]
+    public Guid ServiceId { get; set; }
+
+    [Range(1, 100)]
+    public int Quantity { get; set; } = 1;
 }
 
 public class CompleteAppointmentDto
