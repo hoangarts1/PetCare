@@ -49,6 +49,7 @@ JWT_EXPIRES_MINUTES=60
 
 # Google OAuth
 GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
+VITE_GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
 ```
 
 ### 3. Verify .gitignore
