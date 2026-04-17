@@ -46,6 +46,9 @@ JWT_KEY=your_super_secret_key_minimum_32_characters_long
 JWT_ISSUER=PetCare.API
 JWT_AUDIENCE=PetCare.Client
 JWT_EXPIRES_MINUTES=60
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your_google_oauth_client_id.apps.googleusercontent.com
 ```
 
 ### 3. Verify .gitignore
@@ -105,7 +108,7 @@ For production, **don't use .env files**. Instead, set environment variables dir
 
 ### Azure App Service:
 1. Go to Configuration → Application settings
-2. Add each variable: `SUPABASE_CONNECTION_STRING`, `JWT_KEY`, etc.
+2. Add each variable: `SUPABASE_CONNECTION_STRING`, `JWT_KEY`, `GOOGLE_CLIENT_ID`, etc.
 
 ### Docker:
 ```dockerfile
