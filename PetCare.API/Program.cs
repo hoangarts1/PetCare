@@ -336,8 +336,11 @@ builder.Services.AddCors(options =>
         }
     });
 });
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
-builder.WebHost.UseUrls($"http://*:{port}");
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://*:{port}");
+}
 //builder.Services.AddCors(options =>
 //{
 //    options.AddPolicy("AllowFrontend",
