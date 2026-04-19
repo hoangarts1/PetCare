@@ -62,10 +62,10 @@ public class ProductCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// Create new category (Admin only)
+    /// Create new category (Admin/Staff)
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "Admin,Staff,admin,staff")]
     public async Task<IActionResult> Create([FromBody] CreateProductCategoryDto dto)
     {
         if (!ModelState.IsValid)
@@ -80,10 +80,10 @@ public class ProductCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// Update category (Admin only)
+    /// Update category (Admin/Staff)
     /// </summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "Admin,Staff,admin,staff")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductCategoryDto dto)
     {
         if (!ModelState.IsValid)
@@ -98,10 +98,10 @@ public class ProductCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// Delete category (Admin only)
+    /// Delete category (Admin/Staff)
     /// </summary>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "Admin,Staff,admin,staff")]
     public async Task<IActionResult> Delete(Guid id)
     {
         var result = await _categoryService.DeleteCategoryAsync(id);
@@ -113,10 +113,10 @@ public class ProductCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// Toggle category active status (Admin only)
+    /// Toggle category active status (Admin/Staff)
     /// </summary>
     [HttpPatch("{id}/toggle-active")]
-    [Authorize(Roles = "admin")]
+    [Authorize(Roles = "Admin,Staff,admin,staff")]
     public async Task<IActionResult> ToggleActive(Guid id)
     {
         var result = await _categoryService.ToggleActiveStatusAsync(id);
