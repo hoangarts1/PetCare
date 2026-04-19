@@ -40,9 +40,12 @@ public class ProductsController : ControllerBase
     /// </summary>
     [HttpGet]
     [AllowAnonymous] // Public read access
-    public async Task<IActionResult> GetAll([FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] bool includeInactive = false)
     {
-        var result = await _productService.GetProductsAsync(page, pageSize);
+        var result = await _productService.GetProductsAsync(page, pageSize, includeInactive);
         return Ok(result);
     }
 

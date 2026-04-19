@@ -41,14 +41,14 @@ public class ProductService : IProductService
         }
     }
 
-    public async Task<ServiceResult<PagedResult<ProductDto>>> GetProductsAsync(int page, int pageSize)
+    public async Task<ServiceResult<PagedResult<ProductDto>>> GetProductsAsync(int page, int pageSize, bool includeInactive = false)
     {
         try
         {
             (IEnumerable<Product> products, int totalCount) = await _unitOfWork.Products.GetPagedAsync(
                 page,
                 pageSize,
-                filter: p => p.IsActive,
+                filter: includeInactive ? null : p => p.IsActive,
                 orderBy: q => q.OrderBy(p => p.ProductName),
                 p => p.Category!,
                 p => p.Images
