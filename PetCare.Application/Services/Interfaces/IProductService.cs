@@ -6,7 +6,7 @@ namespace PetCare.Application.Services.Interfaces;
 public interface IProductService
 {
     Task<ServiceResult<ProductDto>> GetProductByIdAsync(Guid productId);
-    Task<ServiceResult<PagedResult<ProductDto>>> GetProductsAsync(int page, int pageSize, bool includeInactive = false);
+    Task<ServiceResult<PagedResult<ProductDto>>> GetProductsAsync(int page, int pageSize, bool includeInactive = true);
     Task<ServiceResult<IEnumerable<ProductDto>>> GetProductsByCategoryAsync(Guid categoryId);
     Task<ServiceResult<IEnumerable<ProductDto>>> SearchProductsAsync(string searchTerm);
     Task<ServiceResult<IEnumerable<ProductDto>>> GetActiveProductsAsync();

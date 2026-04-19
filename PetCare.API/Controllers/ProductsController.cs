@@ -43,7 +43,7 @@ public class ProductsController : ControllerBase
     public async Task<IActionResult> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] bool includeInactive = false)
+        [FromQuery] bool includeInactive = true)
     {
         var result = await _productService.GetProductsAsync(page, pageSize, includeInactive);
         return Ok(result);

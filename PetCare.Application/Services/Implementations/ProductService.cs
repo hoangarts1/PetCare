@@ -41,7 +41,7 @@ public class ProductService : IProductService
         }
     }
 
-    public async Task<ServiceResult<PagedResult<ProductDto>>> GetProductsAsync(int page, int pageSize, bool includeInactive = false)
+    public async Task<ServiceResult<PagedResult<ProductDto>>> GetProductsAsync(int page, int pageSize, bool includeInactive = true)
     {
         try
         {
