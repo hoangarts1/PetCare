@@ -15,6 +15,7 @@ public interface IProductService
     // Management methods
     Task<ServiceResult<ProductDto>> CreateProductAsync(CreateProductDto createProductDto);
     Task<ServiceResult<ProductDto>> UpdateProductAsync(Guid productId, UpdateProductDto updateProductDto);
+    Task<ServiceResult<ProductDto>> UpdateProductStatusAsync(Guid productId, bool isActive);
     Task<ServiceResult<bool>> DeleteProductAsync(Guid productId);
     Task<ServiceResult<ProductDto>> UpdateStockAsync(Guid productId, int quantity);
     

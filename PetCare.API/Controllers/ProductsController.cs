@@ -146,6 +146,21 @@ public class ProductsController : ControllerBase
     }
 
     /// <summary>
+    /// Update product active status only (Admin/Staff only)
+    /// </summary>
+    [HttpPatch("{id}/status")]
+    [Authorize(Roles = "Admin,Staff")]
+    public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateProductStatusRequest request)
+    {
+        var result = await _productService.UpdateProductStatusAsync(id, request.IsActive);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Delete a product (Admin/Staff only)
     /// </summary>
     [HttpDelete("{id}")]
@@ -207,3 +222,4 @@ public class ProductsController : ControllerBase
 }
 
 public record AddProductImageRequest(string ImageUrl);
+public record UpdateProductStatusRequest(bool IsActive);

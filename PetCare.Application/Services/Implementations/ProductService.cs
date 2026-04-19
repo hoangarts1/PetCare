@@ -270,6 +270,29 @@ public class ProductService : IProductService
         }
     }
 
+    public async Task<ServiceResult<ProductDto>> UpdateProductStatusAsync(Guid productId, bool isActive)
+    {
+        try
+        {
+            var product = await _unitOfWork.Products.GetByIdAsync(productId);
+            if (product == null)
+            {
+                return ServiceResult<ProductDto>.FailureResult("Product not found");
+            }
+
+            product.IsActive = isActive;
+            await _unitOfWork.Products.UpdateAsync(product);
+            await _unitOfWork.SaveChangesAsync();
+
+            var productDto = _mapper.Map<ProductDto>(product);
+            return ServiceResult<ProductDto>.SuccessResult(productDto, "Product status updated successfully");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<ProductDto>.FailureResult($"Error updating product status: {ex.Message}");
+        }
+    }
+
     public async Task<ServiceResult<bool>> DeleteProductAsync(Guid productId)
     {
         try
