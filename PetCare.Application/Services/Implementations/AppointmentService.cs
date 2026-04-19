@@ -697,6 +697,74 @@ public class AppointmentService : IAppointmentService
         return ServiceResult<AppointmentBillDto>.SuccessResult(bill);
     }
 
+    public async Task<ServiceResult<RatingFeedbackResponseDto>> CreateRatingFeedbackAsync(Guid appointmentId, Guid userId, CreateRatingFeedbackDto dto)
+    {
+        try
+        {
+            if (dto.Rating < 1 || dto.Rating > 5)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("Rating must be between 1 and 5 stars");
+
+            var appointment = await _unitOfWork.Repository<Appointment>().GetByIdAsync(appointmentId);
+            if (appointment == null)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("Appointment not found");
+
+            if (appointment.UserId != userId)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("You do not have permission to rate this appointment");
+
+            if (!string.Equals(appointment.AppointmentStatus, "completed", StringComparison.OrdinalIgnoreCase))
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("Only completed appointments can be rated");
+
+            var hasFeedback = await _unitOfWork.Repository<RatingFeedback>()
+                .AnyAsync(x => x.AppointmentId == appointmentId);
+
+            if (hasFeedback)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("This appointment has already been rated");
+
+            var feedback = new RatingFeedback
+            {
+                AppointmentId = appointmentId,
+                UserId = userId,
+                Rating = dto.Rating,
+                Description = string.IsNullOrWhiteSpace(dto.Description) ? null : dto.Description.Trim()
+            };
+
+            await _unitOfWork.Repository<RatingFeedback>().AddAsync(feedback);
+            await _unitOfWork.SaveChangesAsync();
+
+            return ServiceResult<RatingFeedbackResponseDto>.SuccessResult(MapToRatingFeedbackDto(feedback), "Rating submitted successfully");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<RatingFeedbackResponseDto>.FailureResult($"Error creating rating feedback: {ex.Message}");
+        }
+    }
+
+    public async Task<ServiceResult<RatingFeedbackResponseDto>> GetRatingFeedbackByAppointmentAsync(Guid appointmentId, Guid userId, string userRole)
+    {
+        try
+        {
+            var appointment = await _unitOfWork.Repository<Appointment>().GetByIdAsync(appointmentId);
+            if (appointment == null)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("Appointment not found");
+
+            var isPrivileged = IsStaffOrAdmin(userRole);
+            if (!isPrivileged && appointment.UserId != userId)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("You do not have permission to view this feedback");
+
+            var feedback = await _unitOfWork.Repository<RatingFeedback>()
+                .FirstOrDefaultAsync(x => x.AppointmentId == appointmentId);
+
+            if (feedback == null)
+                return ServiceResult<RatingFeedbackResponseDto>.FailureResult("Rating feedback not found");
+
+            return ServiceResult<RatingFeedbackResponseDto>.SuccessResult(MapToRatingFeedbackDto(feedback));
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<RatingFeedbackResponseDto>.FailureResult($"Error retrieving rating feedback: {ex.Message}");
+        }
+    }
+
 
     private static AppointmentResponseDto MapToResponseDto(Appointment a) => new()
     {
@@ -745,6 +813,16 @@ public class AppointmentService : IAppointmentService
         IsHomeService = s.IsHomeService,
         IsActive = s.IsActive,
         CreatedAt = s.CreatedAt
+    };
+
+    private static RatingFeedbackResponseDto MapToRatingFeedbackDto(RatingFeedback feedback) => new()
+    {
+        Id = feedback.Id,
+        AppointmentId = feedback.AppointmentId,
+        UserId = feedback.UserId,
+        Rating = feedback.Rating,
+        Description = feedback.Description,
+        CreatedAt = feedback.CreatedAt
     };
 
     private string BuildConfirmedEmailBody(string fullName, DateTime appointmentDate, TimeSpan? startTime, string? notes) => $"""

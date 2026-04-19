@@ -23,4 +23,6 @@ public interface IAppointmentService
     Task<ServiceResult<AppointmentResponseDto>> StartServiceAsync(Guid appointmentId, StartAppointmentServiceDto dto, Guid staffId);
     Task<ServiceResult<AppointmentResponseDto>> CompleteAppointmentAsync(Guid appointmentId, Guid staffId, string? notes);
     Task<ServiceResult<AppointmentBillDto>> GetAppointmentBillAsync(Guid appointmentId, Guid userId, string userRole);
+    Task<ServiceResult<RatingFeedbackResponseDto>> CreateRatingFeedbackAsync(Guid appointmentId, Guid userId, CreateRatingFeedbackDto dto);
+    Task<ServiceResult<RatingFeedbackResponseDto>> GetRatingFeedbackByAppointmentAsync(Guid appointmentId, Guid userId, string userRole);
 }

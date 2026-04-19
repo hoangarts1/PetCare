@@ -28,4 +28,5 @@ public class Appointment : AuditableEntity
     public virtual Service? Service { get; set; }
     public virtual User? AssignedStaff { get; set; }
     public virtual ICollection<AppointmentStatusHistory> StatusHistory { get; set; } = new List<AppointmentStatusHistory>();
+    public virtual ICollection<RatingFeedback> RatingFeedbacks { get; set; } = new List<RatingFeedback>();
 }

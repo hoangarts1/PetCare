@@ -28,6 +28,7 @@ public class PetCareDbContext : DbContext
     public DbSet<StaffService> StaffServices { get; set; }
     public DbSet<Appointment> Appointments { get; set; }
     public DbSet<AppointmentStatusHistory> AppointmentStatusHistories { get; set; }
+    public DbSet<RatingFeedback> RatingFeedbacks { get; set; }
 
     // Notifications
     public DbSet<Notification> Notifications { get; set; }
@@ -371,6 +372,31 @@ public class PetCareDbContext : DbContext
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.AppointmentId);
+        });
+
+        modelBuilder.Entity<RatingFeedback>(entity =>
+        {
+            entity.ToTable("rating_feedbacks");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AppointmentId).HasColumnName("appointment_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Rating).HasColumnName("rating");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(e => e.Appointment)
+                .WithMany(a => a.RatingFeedbacks)
+                .HasForeignKey(e => e.AppointmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.RatingFeedbacks)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.AppointmentId).IsUnique();
+            entity.HasIndex(e => e.UserId);
         });
     }
 

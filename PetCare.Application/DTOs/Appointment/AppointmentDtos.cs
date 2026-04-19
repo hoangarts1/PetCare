@@ -107,6 +107,25 @@ public class CompleteAppointmentDto
     public string? Notes { get; set; }
 }
 
+public class CreateRatingFeedbackDto
+{
+    [Range(1, 5)]
+    public int Rating { get; set; }
+
+    [StringLength(1000)]
+    public string? Description { get; set; }
+}
+
+public class RatingFeedbackResponseDto
+{
+    public Guid Id { get; set; }
+    public Guid AppointmentId { get; set; }
+    public Guid UserId { get; set; }
+    public int Rating { get; set; }
+    public string? Description { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
+
 public class AppointmentServiceItemResponseDto
 {
     public Guid ServiceId { get; set; }

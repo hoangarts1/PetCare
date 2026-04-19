@@ -221,6 +221,28 @@ public class AppointmentsController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
+    [HttpPost("{id:guid}/rating")]
+    [Authorize]
+    public async Task<IActionResult> CreateRatingFeedback(Guid id, [FromBody] CreateRatingFeedbackDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        var userId = GetUserId();
+        var result = await _appointmentService.CreateRatingFeedbackAsync(id, userId, dto);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("{id:guid}/rating")]
+    [Authorize]
+    public async Task<IActionResult> GetRatingFeedback(Guid id)
+    {
+        var userId = GetUserId();
+        var userRole = GetUserRole();
+        var result = await _appointmentService.GetRatingFeedbackByAppointmentAsync(id, userId, userRole);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
     // ─── Helpers ────────────────────────────────────────────────────────────
 
     private Guid GetUserId()
