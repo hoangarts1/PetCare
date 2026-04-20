@@ -13,5 +13,6 @@ public class ProductDto
     public Guid? ProviderId { get; set; }
     public string? ProviderName { get; set; }
     public List<string> Images { get; set; } = new();
+    public List<string> ImageUrls { get; set; } = new();
     public bool IsActive { get; set; }
 }

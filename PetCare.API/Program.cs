@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.ResponseCompression;
@@ -414,6 +415,39 @@ app.UseCors("AppCorsPolicy");
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+static string BuildImageFallbackSvg(string label)
+{
+        var safeLabel = WebUtility.HtmlEncode(string.IsNullOrWhiteSpace(label) ? "Product" : label);
+        return $"""
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="360" viewBox="0 0 480 360">
+    <defs>
+        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#f3f4f6"/>
+            <stop offset="100%" stop-color="#e5e7eb"/>
+        </linearGradient>
+    </defs>
+    <rect width="480" height="360" fill="url(#bg)"/>
+    <rect x="130" y="85" width="220" height="150" rx="14" fill="none" stroke="#9ca3af" stroke-width="6"/>
+    <circle cx="185" cy="140" r="16" fill="none" stroke="#9ca3af" stroke-width="6"/>
+    <path d="M150 205l45-42 36 30 40-44 35 56" fill="none" stroke="#9ca3af" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="240" y="284" text-anchor="middle" fill="#4b5563" font-family="Arial, sans-serif" font-size="26" font-weight="600">{safeLabel}</text>
+</svg>
+""";
+}
+
+app.MapGet("/img/{**path}", (string? path) =>
+{
+        var label = Path.GetFileNameWithoutExtension(path ?? string.Empty);
+        return Results.Content(BuildImageFallbackSvg(label), "image/svg+xml");
+});
+
+app.MapGet("/uploads/{**path}", (string? path) =>
+{
+        var label = Path.GetFileNameWithoutExtension(path ?? string.Empty);
+        return Results.Content(BuildImageFallbackSvg(label), "image/svg+xml");
+});
+
 app.MapHealthChecks("/health");
 app.MapControllers();
 
