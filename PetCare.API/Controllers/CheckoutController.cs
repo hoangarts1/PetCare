@@ -3,9 +3,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using PayOS;
-using PayOS.Models.V2.PaymentRequests;
-using PayOS.Models.Webhooks;
 using PetCare.Application.DTOs.Order;
 using PetCare.Domain.Entities;
 using PetCare.Infrastructure.Data;
@@ -18,46 +15,14 @@ namespace PetCare.API.Controllers;
 public class CheckoutController : ControllerBase
 {
     private const decimal MembershipDiscountRate = 0.10m;
+    private const int WalletOrderRefundWindowDays = 3;
     private const string StaffAdminRoles = "Staff,staff,Admin,admin";
 
     private readonly PetCareDbContext _context;
-    private readonly PayOSClient? _payOS;
-    private readonly bool _payOsConfigured;
-    private readonly string _fallbackReturnUrl;
-    private readonly string _fallbackCancelUrl;
 
-    public CheckoutController(PetCareDbContext context, IConfiguration configuration)
+    public CheckoutController(PetCareDbContext context)
     {
         _context = context;
-
-        var clientId = GetFirstNonEmpty(
-            configuration["PayOS:ClientId"],
-            Environment.GetEnvironmentVariable("PAYOS_CLIENT_ID"));
-
-        var apiKey = GetFirstNonEmpty(
-            configuration["PayOS:ApiKey"],
-            Environment.GetEnvironmentVariable("PAYOS_API_KEY"));
-
-        var checksumKey = GetFirstNonEmpty(
-            configuration["PayOS:ChecksumKey"],
-            Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY"));
-
-        _payOsConfigured = !string.IsNullOrWhiteSpace(clientId)
-            && !string.IsNullOrWhiteSpace(apiKey)
-            && !string.IsNullOrWhiteSpace(checksumKey);
-
-        if (_payOsConfigured)
-        {
-            _payOS = new PayOSClient(clientId!, apiKey!, checksumKey!);
-        }
-
-        _fallbackReturnUrl = configuration["PayOS:CheckoutReturnUrl"]
-            ?? configuration["PayOS:ReturnUrl"]
-            ?? "https://pettsuba.live/thanh-toan/thanh-cong";
-
-        _fallbackCancelUrl = configuration["PayOS:CheckoutCancelUrl"]
-            ?? configuration["PayOS:CancelUrl"]
-            ?? "https://pettsuba.live/thanh-toan";
     }
 
     [HttpGet("summary")]
@@ -223,21 +188,21 @@ public class CheckoutController : ControllerBase
         }
 
         var paymentMethod = (dto.PaymentMethod ?? "cod").Trim().ToLowerInvariant();
-        if (paymentMethod != "cod" && paymentMethod != "payos" && paymentMethod != "wallet")
+        if (paymentMethod == "payos")
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "PayOS payment for checkout orders is disabled. Please use COD or wallet."
+            });
+        }
+
+        if (paymentMethod != "cod" && paymentMethod != "wallet")
         {
             return BadRequest(new
             {
                 success = false,
                 message = "Unsupported payment method"
-            });
-        }
-
-        if (paymentMethod == "payos" && (!_payOsConfigured || _payOS == null))
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = "PayOS is not configured on server"
             });
         }
 
@@ -284,15 +249,6 @@ public class CheckoutController : ControllerBase
             : 0m;
         var discountAmount = membershipDiscountAmount;
         var finalAmount = totalAmount - discountAmount;
-
-        if (paymentMethod == "payos" && finalAmount <= 0)
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Final amount must be greater than 0 for PayOS payment"
-            });
-        }
 
         Wallet? wallet = null;
         if (paymentMethod == "wallet")
@@ -367,61 +323,6 @@ public class CheckoutController : ControllerBase
             _context.Products.Update(cartItem.Product);
         }
 
-        long? orderCode = null;
-        string? paymentUrl = null;
-
-        if (paymentMethod == "payos")
-        {
-            orderCode = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-
-            var (returnUrl, cancelUrl) = BuildClientReturnUrls(dto.ReturnBaseUrl);
-            var amountVnd = Math.Max(1, decimal.ToInt32(decimal.Ceiling(finalAmount)));
-            var payOsDescription = BuildPayOsDescription(order.OrderNumber);
-
-            var paymentRequest = new CreatePaymentLinkRequest
-            {
-                OrderCode = orderCode.Value,
-                Amount = amountVnd,
-                Description = payOsDescription,
-                ReturnUrl = $"{returnUrl}?orderNumber={Uri.EscapeDataString(order.OrderNumber)}&amount={finalAmount}&method=payos&orderCode={orderCode.Value}",
-                CancelUrl = cancelUrl,
-                Items = cartItems.Select(ci => new PaymentLinkItem
-                {
-                    Name = ci.Product.ProductName,
-                    Quantity = ci.Quantity,
-                    Price = Math.Max(1, decimal.ToInt32(decimal.Ceiling(GetEffectiveUnitPrice(ci.Product))))
-                }).ToList()
-            };
-
-            try
-            {
-                var link = await _payOS!.PaymentRequests.CreateAsync(paymentRequest);
-                paymentUrl = link.CheckoutUrl;
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = $"PayOS error: {ex.Message}"
-                });
-            }
-
-            var payment = new Payment
-            {
-                OrderId = order.Id,
-                UserId = userId,
-                PaymentMethod = "payos",
-                PaymentStatus = "pending",
-                Amount = finalAmount,
-                TransactionId = orderCode.ToString(),
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-
-            await _context.Payments.AddAsync(payment);
-        }
-        else
         {
             var payment = new Payment
             {
@@ -479,7 +380,7 @@ public class CheckoutController : ControllerBase
         return Ok(new
         {
             success = true,
-            message = paymentMethod == "payos" ? "Payment link created" : "Order placed successfully",
+            message = "Order placed successfully",
             data = new
             {
                 order.Id,
@@ -490,9 +391,7 @@ public class CheckoutController : ControllerBase
                 order.PaymentMethod,
                 order.PaymentStatus,
                 order.OrderStatus,
-                order.OrderedAt,
-                paymentUrl,
-                orderCode
+                order.OrderedAt
             }
         });
     }
@@ -506,215 +405,186 @@ public class CheckoutController : ControllerBase
     [HttpPost("confirm-payment")]
     public async Task<IActionResult> ConfirmPayment([FromQuery] long? orderCode, [FromQuery] string? orderNumber)
     {
-        if ((!orderCode.HasValue || orderCode.Value <= 0) && string.IsNullOrWhiteSpace(orderNumber))
+        await Task.CompletedTask;
+        return BadRequest(new
+        {
+            success = false,
+            message = "PayOS payment for checkout orders is disabled."
+        });
+    }
+
+    [HttpPost("{orderId:guid}/request-wallet-refund")]
+    public async Task<IActionResult> RequestWalletRefund(Guid orderId, [FromBody] RequestWalletRefundDto? dto)
+    {
+        var userId = GetUserId();
+        var order = await _context.Orders
+            .FirstOrDefaultAsync(item => item.Id == orderId && item.UserId == userId);
+
+        if (order == null)
+        {
+            return NotFound(new { success = false, message = "Order not found" });
+        }
+
+        if (!string.Equals(order.PaymentMethod, "wallet", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { success = false, message = "Only wallet-paid orders can be refunded to wallet" });
+        }
+
+        if (!string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(order.PaymentStatus, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { success = false, message = "Only paid orders can request refund" });
+        }
+
+        if (string.Equals(order.OrderStatus, "refund_requested", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(order.OrderStatus, "refunded", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { success = false, message = "Refund has already been requested or completed for this order" });
+        }
+
+        if (order.OrderedAt < DateTime.UtcNow.AddDays(-WalletOrderRefundWindowDays))
         {
             return BadRequest(new
             {
                 success = false,
-                message = "orderCode or orderNumber is required"
+                message = $"Refund request is only allowed within {WalletOrderRefundWindowDays} days after purchase"
             });
         }
 
-        var userId = GetUserId();
+        order.OrderStatus = "refund_requested";
+        order.UpdatedAt = DateTime.UtcNow;
 
-        var paymentQuery = _context.Payments
-            .Include(payment => payment.Order)
-            .Where(payment =>
-                payment.PaymentMethod == "payos"
-                && payment.Order.UserId == userId);
-
-        if (orderCode.HasValue && orderCode.Value > 0)
+        await _context.OrderStatusHistories.AddAsync(new OrderStatusHistory
         {
-            var orderCodeText = orderCode.Value.ToString();
-            paymentQuery = paymentQuery.Where(payment => payment.TransactionId == orderCodeText);
-        }
+            OrderId = order.Id,
+            Status = "refund_requested",
+            Notes = dto?.Reason?.Trim(),
+            UpdatedBy = userId,
+            CreatedAt = DateTime.UtcNow
+        });
 
-        if (!string.IsNullOrWhiteSpace(orderNumber))
-        {
-            var normalizedOrderNumber = orderNumber.Trim();
-            paymentQuery = paymentQuery.Where(payment => payment.Order.OrderNumber == normalizedOrderNumber);
-        }
-
-        var paymentEntity = await paymentQuery
-            .OrderByDescending(payment => payment.CreatedAt)
-            .FirstOrDefaultAsync();
-
-        if (paymentEntity == null)
-        {
-            return NotFound(new
-            {
-                success = false,
-                message = "Payment not found"
-            });
-        }
-
-        var alreadyPaid = string.Equals(paymentEntity.PaymentStatus, "completed", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(paymentEntity.Order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase);
-
-        if (alreadyPaid)
-        {
-            return Ok(new
-            {
-                success = true,
-                message = "Payment already confirmed",
-                data = new
-                {
-                    paymentEntity.Order.OrderNumber,
-                    paymentEntity.Order.FinalAmount,
-                    paymentEntity.Order.PaymentStatus,
-                    paymentEntity.Order.OrderStatus,
-                    confirmed = true,
-                    alreadyConfirmed = true
-                }
-            });
-        }
-
-        var now = DateTime.UtcNow;
-        paymentEntity.PaymentStatus = "completed";
-        paymentEntity.PaidAt ??= now;
-        paymentEntity.UpdatedAt = now;
-
-        paymentEntity.Order.PaymentStatus = "paid";
-        if (!string.Equals(paymentEntity.Order.OrderStatus, "completed", StringComparison.OrdinalIgnoreCase)
-            && !string.Equals(paymentEntity.Order.OrderStatus, "delivered", StringComparison.OrdinalIgnoreCase))
-        {
-            paymentEntity.Order.OrderStatus = "confirmed";
-        }
-        paymentEntity.Order.UpdatedAt = now;
-
-        _context.Payments.Update(paymentEntity);
-        _context.Orders.Update(paymentEntity.Order);
         await _context.SaveChangesAsync();
 
         return Ok(new
         {
             success = true,
-            message = "Payment confirmed",
+            message = "Refund request submitted successfully and waiting for staff confirmation",
             data = new
             {
-                paymentEntity.Order.OrderNumber,
-                paymentEntity.Order.FinalAmount,
-                paymentEntity.Order.PaymentStatus,
-                paymentEntity.Order.OrderStatus,
-                confirmed = true,
-                alreadyConfirmed = false
+                order.Id,
+                order.OrderNumber,
+                order.OrderStatus,
+                order.FinalAmount
+            }
+        });
+    }
+
+    [HttpPost("{orderId:guid}/approve-wallet-refund")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> ApproveWalletRefund(Guid orderId)
+    {
+        var reviewerId = GetUserId();
+        var order = await _context.Orders
+            .Include(item => item.User)
+            .FirstOrDefaultAsync(item => item.Id == orderId);
+
+        if (order == null)
+        {
+            return NotFound(new { success = false, message = "Order not found" });
+        }
+
+        if (!string.Equals(order.PaymentMethod, "wallet", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { success = false, message = "Only wallet-paid orders can be refunded to wallet" });
+        }
+
+        if (!string.Equals(order.OrderStatus, "refund_requested", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new { success = false, message = "Order is not in refund requested state" });
+        }
+
+        var wallet = await _context.Wallets.FirstOrDefaultAsync(item => item.UserId == order.UserId);
+        if (wallet == null)
+        {
+            wallet = new Wallet
+            {
+                UserId = order.UserId,
+                Balance = 0m,
+                PendingWithdrawal = 0m,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+            await _context.Wallets.AddAsync(wallet);
+        }
+
+        var before = wallet.Balance;
+        wallet.Balance += order.FinalAmount;
+        wallet.UpdatedAt = DateTime.UtcNow;
+
+        order.OrderStatus = "refunded";
+        order.PaymentStatus = "refunded";
+        order.UpdatedAt = DateTime.UtcNow;
+
+        var payment = await _context.Payments
+            .FirstOrDefaultAsync(item => item.OrderId == order.Id);
+        if (payment != null)
+        {
+            payment.PaymentStatus = "refunded";
+            payment.RefundedAt = DateTime.UtcNow;
+            payment.RefundAmount = order.FinalAmount;
+            payment.RefundReason = "Refunded to wallet after staff confirmation";
+            payment.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.WalletTransactions.AddAsync(new WalletTransaction
+        {
+            WalletId = wallet.Id,
+            UserId = order.UserId,
+            TransactionType = "order_refund",
+            Status = "completed",
+            Amount = order.FinalAmount,
+            BalanceBefore = before,
+            BalanceAfter = wallet.Balance,
+            ReferenceType = "order",
+            ReferenceId = order.Id,
+            Description = $"Refund for order {order.OrderNumber}",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        await _context.OrderStatusHistories.AddAsync(new OrderStatusHistory
+        {
+            OrderId = order.Id,
+            Status = "refunded",
+            Notes = "Refund approved by staff/admin and returned to wallet",
+            UpdatedBy = reviewerId,
+            CreatedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Wallet refund approved successfully",
+            data = new
+            {
+                order.Id,
+                order.OrderNumber,
+                refundAmount = order.FinalAmount,
+                walletBalance = wallet.Balance,
+                order.OrderStatus,
+                order.PaymentStatus
             }
         });
     }
 
     [AllowAnonymous]
     [HttpPost("payos-webhook")]
-    public async Task<IActionResult> PayOsWebhook([FromBody] PayOsWebhookRequest webhook)
+    public async Task<IActionResult> PayOsWebhook()
     {
-        if (!_payOsConfigured || _payOS == null)
-        {
-            return Ok(new { success = false, message = "PayOS not configured" });
-        }
-
-        try
-        {
-            var webhookData = webhook.Data;
-
-            var sdkWebhook = new Webhook
-            {
-                Code = webhook.Code,
-                Description = webhook.Desc,
-                Success = webhook.Success,
-                Signature = webhook.Signature,
-                Data = new WebhookData
-                {
-                    OrderCode = webhookData?.OrderCode ?? 0,
-                    Amount = webhookData?.Amount ?? 0,
-                    Description = webhookData?.Description ?? string.Empty,
-                    AccountNumber = webhookData?.AccountNumber ?? string.Empty,
-                    Reference = webhookData?.Reference ?? string.Empty,
-                    TransactionDateTime = webhookData?.TransactionDateTime ?? string.Empty,
-                    Currency = webhookData?.Currency ?? string.Empty,
-                    PaymentLinkId = webhookData?.PaymentLinkId ?? string.Empty,
-                    Code = webhookData?.Code ?? string.Empty,
-                    CounterAccountBankId = webhookData?.CounterAccountBankId ?? string.Empty,
-                    CounterAccountBankName = webhookData?.CounterAccountBankName ?? string.Empty,
-                    CounterAccountName = webhookData?.CounterAccountName ?? string.Empty,
-                    CounterAccountNumber = webhookData?.CounterAccountNumber ?? string.Empty,
-                    VirtualAccountName = webhookData?.VirtualAccountName ?? string.Empty,
-                    VirtualAccountNumber = webhookData?.VirtualAccountNumber ?? string.Empty
-                }
-            };
-
-            var verified = await _payOS.Webhooks.VerifyAsync(sdkWebhook);
-            var code = verified.OrderCode.ToString();
-
-            var payment = await _context.Payments
-                .Include(p => p.Order)
-                .FirstOrDefaultAsync(p => p.TransactionId == code && p.PaymentMethod == "payos");
-
-            if (payment == null)
-            {
-                return Ok(new { success = false, message = "Payment not found" });
-            }
-
-            payment.PaymentGatewayResponse = JsonSerializer.Serialize(webhook);
-            payment.UpdatedAt = DateTime.UtcNow;
-
-            if (verified.Code == "00" && webhook.Success)
-            {
-                payment.PaymentStatus = "completed";
-                payment.PaidAt = DateTime.UtcNow;
-                payment.Order.PaymentStatus = "paid";
-                payment.Order.OrderStatus = "confirmed";
-                payment.Order.UpdatedAt = DateTime.UtcNow;
-            }
-            else
-            {
-                payment.PaymentStatus = "failed";
-                payment.Order.PaymentStatus = "failed";
-                payment.Order.OrderStatus = "cancelled";
-                payment.Order.UpdatedAt = DateTime.UtcNow;
-            }
-
-            _context.Payments.Update(payment);
-            _context.Orders.Update(payment.Order);
-            await _context.SaveChangesAsync();
-
-            return Ok(new { success = true });
-        }
-        catch (Exception ex)
-        {
-            return Ok(new { success = false, message = ex.Message });
-        }
-    }
-
-    private (string returnUrl, string cancelUrl) BuildClientReturnUrls(string? returnBaseUrl)
-    {
-        if (Uri.TryCreate(returnBaseUrl, UriKind.Absolute, out var uri)
-            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-        {
-            var origin = $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : $":" + uri.Port)}";
-            return ($"{origin}/thanh-toan/thanh-cong", $"{origin}/thanh-toan");
-        }
-
-        return (_fallbackReturnUrl, _fallbackCancelUrl);
-    }
-
-    private static string? GetFirstNonEmpty(params string?[] values)
-    {
-        foreach (var value in values)
-        {
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static string BuildPayOsDescription(string orderNumber)
-    {
-        // PayOS requires max 25 characters for description.
-        var compactOrder = orderNumber.Replace("ORD", "DH", StringComparison.OrdinalIgnoreCase);
-        var raw = $"DH {compactOrder}";
-        return raw.Length <= 25 ? raw : raw[..25];
+        await Task.CompletedTask;
+        return BadRequest(new { success = false, message = "PayOS webhook for checkout orders is disabled." });
     }
 
     private static decimal GetEffectiveUnitPrice(Product product)
@@ -733,31 +603,8 @@ public class CheckoutController : ControllerBase
         return userId;
     }
 
-    public class PayOsWebhookRequest
+    public class RequestWalletRefundDto
     {
-        public string Code { get; set; } = string.Empty;
-        public string Desc { get; set; } = string.Empty;
-        public bool Success { get; set; }
-        public string Signature { get; set; } = string.Empty;
-        public PayOsWebhookData? Data { get; set; }
-    }
-
-    public class PayOsWebhookData
-    {
-        public long OrderCode { get; set; }
-        public int Amount { get; set; }
-        public string Description { get; set; } = string.Empty;
-        public string? AccountNumber { get; set; }
-        public string? Reference { get; set; }
-        public string? TransactionDateTime { get; set; }
-        public string? Currency { get; set; }
-        public string PaymentLinkId { get; set; } = string.Empty;
-        public string? Code { get; set; }
-        public string? CounterAccountBankId { get; set; }
-        public string? CounterAccountBankName { get; set; }
-        public string? CounterAccountName { get; set; }
-        public string? CounterAccountNumber { get; set; }
-        public string? VirtualAccountName { get; set; }
-        public string? VirtualAccountNumber { get; set; }
+        public string? Reason { get; set; }
     }
 }

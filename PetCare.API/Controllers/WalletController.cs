@@ -1,7 +1,11 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using PayOS;
+using PayOS.Models.V2.PaymentRequests;
+using PayOS.Models.Webhooks;
 using PetCare.Domain.Entities;
 using PetCare.Infrastructure.Data;
 
@@ -13,10 +17,41 @@ namespace PetCare.API.Controllers;
 public class WalletController : ControllerBase
 {
     private readonly PetCareDbContext _context;
+    private readonly PayOSClient? _payOS;
+    private readonly bool _payOsConfigured;
+    private readonly string _fallbackTopupReturnUrl;
+    private readonly string _fallbackTopupCancelUrl;
 
-    public WalletController(PetCareDbContext context)
+    public WalletController(PetCareDbContext context, IConfiguration configuration)
     {
         _context = context;
+
+        var clientId = GetFirstNonEmpty(
+            configuration["PayOS:ClientId"],
+            Environment.GetEnvironmentVariable("PAYOS_CLIENT_ID"));
+
+        var apiKey = GetFirstNonEmpty(
+            configuration["PayOS:ApiKey"],
+            Environment.GetEnvironmentVariable("PAYOS_API_KEY"));
+
+        var checksumKey = GetFirstNonEmpty(
+            configuration["PayOS:ChecksumKey"],
+            Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY"));
+
+        _payOsConfigured = !string.IsNullOrWhiteSpace(clientId)
+            && !string.IsNullOrWhiteSpace(apiKey)
+            && !string.IsNullOrWhiteSpace(checksumKey);
+
+        if (_payOsConfigured)
+        {
+            _payOS = new PayOSClient(clientId!, apiKey!, checksumKey!);
+        }
+
+        _fallbackTopupReturnUrl = configuration["PayOS:WalletTopupReturnUrl"]
+            ?? "https://pettsuba.live/vi/nap-thanh-cong";
+
+        _fallbackTopupCancelUrl = configuration["PayOS:WalletTopupCancelUrl"]
+            ?? "https://pettsuba.live/vi";
     }
 
     [HttpGet("me")]
@@ -137,8 +172,244 @@ public class WalletController : ControllerBase
         });
     }
 
+    [HttpPost("topup/create-payos-link")]
+    public async Task<IActionResult> CreatePayOsTopupLink([FromBody] CreateWalletTopupRequest request)
+    {
+        if (!_payOsConfigured || _payOS == null)
+        {
+            return BadRequest(new { success = false, message = "PayOS is not configured on server" });
+        }
+
+        if (request.Amount < 1000)
+        {
+            return BadRequest(new { success = false, message = "Minimum top-up amount is 1,000 VND" });
+        }
+
+        var userId = GetUserId();
+        var wallet = await GetOrCreateWalletAsync(userId);
+        var amount = Math.Round(request.Amount, 0, MidpointRounding.AwayFromZero);
+        var orderCode = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
+        var (returnUrl, cancelUrl) = BuildWalletTopupReturnUrls(request.ReturnBaseUrl);
+        var description = BuildWalletTopupDescription(userId);
+
+        var paymentRequest = new CreatePaymentLinkRequest
+        {
+            OrderCode = orderCode,
+            Amount = decimal.ToInt32(amount),
+            Description = description,
+            ReturnUrl = $"{returnUrl}?orderCode={orderCode}&amount={amount}",
+            CancelUrl = cancelUrl,
+            Items = new List<PaymentLinkItem>
+            {
+                new()
+                {
+                    Name = "Wallet top-up",
+                    Quantity = 1,
+                    Price = decimal.ToInt32(amount)
+                }
+            }
+        };
+
+        string checkoutUrl;
+        try
+        {
+            var link = await _payOS.PaymentRequests.CreateAsync(paymentRequest);
+            checkoutUrl = link.CheckoutUrl;
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { success = false, message = $"PayOS error: {ex.Message}" });
+        }
+
+        await _context.WalletTransactions.AddAsync(new WalletTransaction
+        {
+            WalletId = wallet.Id,
+            UserId = userId,
+            TransactionType = "deposit",
+            Status = "pending",
+            Amount = amount,
+            BalanceBefore = wallet.Balance,
+            BalanceAfter = wallet.Balance,
+            ReferenceType = "wallet_topup",
+            ReferenceId = Guid.NewGuid(),
+            Description = JsonSerializer.Serialize(new WalletTopupMeta
+            {
+                OrderCode = orderCode,
+                CheckoutUrl = checkoutUrl,
+                Note = request.Note?.Trim()
+            }),
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Top-up QR created successfully",
+            data = new
+            {
+                orderCode,
+                amount,
+                points = amount,
+                paymentUrl = checkoutUrl
+            }
+        });
+    }
+
+    [HttpPost("topup/confirm")]
+    public async Task<IActionResult> ConfirmTopup([FromQuery] long orderCode)
+    {
+        if (orderCode <= 0)
+        {
+            return BadRequest(new { success = false, message = "Invalid orderCode" });
+        }
+
+        var userId = GetUserId();
+        var transaction = await _context.WalletTransactions
+            .Include(item => item.Wallet)
+            .Where(item => item.UserId == userId && item.ReferenceType == "wallet_topup")
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(item => TryGetTopupOrderCode(item.Description) == orderCode);
+
+        if (transaction == null)
+        {
+            return NotFound(new { success = false, message = "Top-up transaction not found" });
+        }
+
+        if (string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            return Ok(new
+            {
+                success = true,
+                message = "Top-up was already confirmed",
+                data = new
+                {
+                    orderCode,
+                    transaction.Amount,
+                    points = transaction.Amount,
+                    balance = transaction.Wallet.Balance,
+                    availableBalance = transaction.Wallet.Balance - transaction.Wallet.PendingWithdrawal,
+                    alreadyConfirmed = true
+                }
+            });
+        }
+
+        var wallet = transaction.Wallet;
+        var before = wallet.Balance;
+        wallet.Balance += transaction.Amount;
+        wallet.UpdatedAt = DateTime.UtcNow;
+
+        transaction.Status = "completed";
+        transaction.BalanceBefore = before;
+        transaction.BalanceAfter = wallet.Balance;
+        transaction.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Top-up confirmed successfully",
+            data = new
+            {
+                orderCode,
+                transaction.Amount,
+                points = transaction.Amount,
+                balance = wallet.Balance,
+                availableBalance = wallet.Balance - wallet.PendingWithdrawal,
+                alreadyConfirmed = false
+            }
+        });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("payos-webhook")]
+    public async Task<IActionResult> PayOsWebhook([FromBody] PayOsWebhookRequest webhook)
+    {
+        if (!_payOsConfigured || _payOS == null)
+        {
+            return Ok(new { success = false, message = "PayOS not configured" });
+        }
+
+        try
+        {
+            var sdkWebhook = new Webhook
+            {
+                Code = webhook.Code,
+                Description = webhook.Desc,
+                Success = webhook.Success,
+                Signature = webhook.Signature,
+                Data = new WebhookData
+                {
+                    OrderCode = webhook.Data?.OrderCode ?? 0,
+                    Amount = webhook.Data?.Amount ?? 0,
+                    Description = webhook.Data?.Description ?? string.Empty,
+                    AccountNumber = webhook.Data?.AccountNumber ?? string.Empty,
+                    Reference = webhook.Data?.Reference ?? string.Empty,
+                    TransactionDateTime = webhook.Data?.TransactionDateTime ?? string.Empty,
+                    Currency = webhook.Data?.Currency ?? string.Empty,
+                    PaymentLinkId = webhook.Data?.PaymentLinkId ?? string.Empty,
+                    Code = webhook.Data?.Code ?? string.Empty,
+                    CounterAccountBankId = webhook.Data?.CounterAccountBankId ?? string.Empty,
+                    CounterAccountBankName = webhook.Data?.CounterAccountBankName ?? string.Empty,
+                    CounterAccountName = webhook.Data?.CounterAccountName ?? string.Empty,
+                    CounterAccountNumber = webhook.Data?.CounterAccountNumber ?? string.Empty,
+                    VirtualAccountName = webhook.Data?.VirtualAccountName ?? string.Empty,
+                    VirtualAccountNumber = webhook.Data?.VirtualAccountNumber ?? string.Empty
+                }
+            };
+
+            var verified = await _payOS.Webhooks.VerifyAsync(sdkWebhook);
+            var orderCode = verified.OrderCode;
+
+            var transaction = await _context.WalletTransactions
+                .Include(item => item.Wallet)
+                .Where(item => item.ReferenceType == "wallet_topup")
+                .OrderByDescending(item => item.CreatedAt)
+                .FirstOrDefaultAsync(item => TryGetTopupOrderCode(item.Description) == orderCode);
+
+            if (transaction == null)
+            {
+                return Ok(new { success = false, message = "Top-up transaction not found" });
+            }
+
+            if (string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new { success = true, message = "Top-up already completed" });
+            }
+
+            if (verified.Code == "00" && webhook.Success)
+            {
+                var wallet = transaction.Wallet;
+                var before = wallet.Balance;
+                wallet.Balance += transaction.Amount;
+                wallet.UpdatedAt = DateTime.UtcNow;
+
+                transaction.Status = "completed";
+                transaction.BalanceBefore = before;
+                transaction.BalanceAfter = wallet.Balance;
+                transaction.UpdatedAt = DateTime.UtcNow;
+            }
+            else
+            {
+                transaction.Status = "failed";
+                transaction.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new { success = true });
+        }
+        catch (Exception ex)
+        {
+            return Ok(new { success = false, message = ex.Message });
+        }
+    }
+
     [HttpPost("withdrawals")]
-    public async Task<IActionResult> CreateWithdrawalRequest([FromBody] WalletAmountRequest request)
+    public async Task<IActionResult> CreateWithdrawalRequest([FromBody] WalletWithdrawalCreateRequest request)
     {
         if (request.Amount <= 0)
         {
@@ -175,7 +446,13 @@ public class WalletController : ControllerBase
             UserId = userId,
             Amount = amount,
             Status = "pending",
-            Note = request.Note?.Trim(),
+            Note = JsonSerializer.Serialize(new WalletWithdrawalMeta
+            {
+                AccountHolder = request.AccountHolder?.Trim(),
+                AccountNumber = request.AccountNumber?.Trim(),
+                BankName = request.BankName?.Trim(),
+                Note = request.Note?.Trim()
+            }),
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow
         };
@@ -521,11 +798,77 @@ public class WalletController : ControllerBase
 
         return userId;
     }
+
+    private (string returnUrl, string cancelUrl) BuildWalletTopupReturnUrls(string? returnBaseUrl)
+    {
+        if (Uri.TryCreate(returnBaseUrl, UriKind.Absolute, out var uri)
+            && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+        {
+            var origin = $"{uri.Scheme}://{uri.Host}{(uri.IsDefaultPort ? string.Empty : ":" + uri.Port)}";
+            return ($"{origin}/vi/nap-thanh-cong", $"{origin}/vi");
+        }
+
+        return (_fallbackTopupReturnUrl, _fallbackTopupCancelUrl);
+    }
+
+    private static string BuildWalletTopupDescription(Guid userId)
+    {
+        var compact = userId.ToString("N")[..8].ToUpperInvariant();
+        var description = $"Topup {compact}";
+        return description.Length <= 25 ? description : description[..25];
+    }
+
+    private static long? TryGetTopupOrderCode(string? rawDescription)
+    {
+        if (string.IsNullOrWhiteSpace(rawDescription))
+        {
+            return null;
+        }
+
+        try
+        {
+            var meta = JsonSerializer.Deserialize<WalletTopupMeta>(rawDescription);
+            return meta?.OrderCode;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? GetFirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
 }
 
 public class WalletAmountRequest
 {
     public decimal Amount { get; set; }
+    public string? Note { get; set; }
+}
+
+public class CreateWalletTopupRequest
+{
+    public decimal Amount { get; set; }
+    public string? Note { get; set; }
+    public string? ReturnBaseUrl { get; set; }
+}
+
+public class WalletWithdrawalCreateRequest
+{
+    public decimal Amount { get; set; }
+    public string? BankName { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? AccountHolder { get; set; }
     public string? Note { get; set; }
 }
 
@@ -537,4 +880,47 @@ public class RejectWithdrawalRequest
 public class PayServiceRequest
 {
     public Guid AppointmentId { get; set; }
+}
+
+public class PayOsWebhookRequest
+{
+    public string Code { get; set; } = string.Empty;
+    public string Desc { get; set; } = string.Empty;
+    public bool Success { get; set; }
+    public string Signature { get; set; } = string.Empty;
+    public PayOsWebhookData? Data { get; set; }
+}
+
+public class PayOsWebhookData
+{
+    public long OrderCode { get; set; }
+    public int Amount { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public string? AccountNumber { get; set; }
+    public string? Reference { get; set; }
+    public string? TransactionDateTime { get; set; }
+    public string? Currency { get; set; }
+    public string PaymentLinkId { get; set; } = string.Empty;
+    public string? Code { get; set; }
+    public string? CounterAccountBankId { get; set; }
+    public string? CounterAccountBankName { get; set; }
+    public string? CounterAccountName { get; set; }
+    public string? CounterAccountNumber { get; set; }
+    public string? VirtualAccountName { get; set; }
+    public string? VirtualAccountNumber { get; set; }
+}
+
+public class WalletTopupMeta
+{
+    public long OrderCode { get; set; }
+    public string? CheckoutUrl { get; set; }
+    public string? Note { get; set; }
+}
+
+public class WalletWithdrawalMeta
+{
+    public string? BankName { get; set; }
+    public string? AccountNumber { get; set; }
+    public string? AccountHolder { get; set; }
+    public string? Note { get; set; }
 }
