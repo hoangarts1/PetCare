@@ -182,12 +182,11 @@ public class CheckoutController : ControllerBase
 
         var totalAmount = cartItems.Sum(i => GetEffectiveUnitPrice(i.Product) * i.Quantity);
         var hasActiveMembership = await HasActiveMembershipAsync(userId);
-        const decimal shippingFee = 0m;
         var membershipDiscountAmount = hasActiveMembership
             ? Math.Round(totalAmount * MembershipDiscountRate, 0, MidpointRounding.AwayFromZero)
             : 0m;
         var discountAmount = membershipDiscountAmount;
-        var finalAmount = totalAmount + shippingFee - discountAmount;
+        var finalAmount = totalAmount - discountAmount;
 
         if (paymentMethod == "payos" && finalAmount <= 0)
         {
@@ -204,8 +203,6 @@ public class CheckoutController : ControllerBase
             OrderNumber = orderNumber,
             OrderStatus = "pending",
             TotalAmount = totalAmount,
-            ShippingFee = shippingFee,
-            DiscountAmount = discountAmount,
             FinalAmount = finalAmount,
             PaymentMethod = paymentMethod,
             PaymentStatus = paymentMethod == "cod" ? "pending" : "unpaid",
@@ -336,7 +333,6 @@ public class CheckoutController : ControllerBase
                 order.OrderNumber,
                 order.TotalAmount,
                 membershipDiscountAmount,
-                order.DiscountAmount,
                 order.FinalAmount,
                 order.PaymentMethod,
                 order.PaymentStatus,

@@ -5,8 +5,6 @@ namespace PetCare.Application.DTOs.Appointment;
 public class CreateAppointmentDto
 {
     public string? Pet { get; set; }
-
-    public Guid? ServiceId { get; set; }
     
     [Required]
     [StringLength(50)]
@@ -18,20 +16,15 @@ public class CreateAppointmentDto
     [Required]
     public TimeSpan StartTime { get; set; }
     
-    [Required]
-    public TimeSpan EndTime { get; set; }
-    
     public string? Notes { get; set; }
 }
 
 public class UpdateAppointmentDto
 {
     public string? Pet { get; set; }
-    public Guid? ServiceId { get; set; }
     public string? AppointmentType { get; set; }
     public DateTime? AppointmentDate { get; set; }
     public TimeSpan? StartTime { get; set; }
-    public TimeSpan? EndTime { get; set; }
     public string? Notes { get; set; }
 }
 
@@ -41,16 +34,12 @@ public class AppointmentResponseDto
     public Guid UserId { get; set; }
     public string UserName { get; set; } = string.Empty;
     public string? Pet { get; set; }
-    public Guid? ServiceId { get; set; }
-    public string? ServiceName { get; set; }
-    public decimal? ServicePrice { get; set; }
     public string AppointmentType { get; set; } = string.Empty;
     public string AppointmentStatus { get; set; } = string.Empty;
     public Guid? AssignedStaffId { get; set; }
     public string? AssignedStaffName { get; set; }
     public DateTime AppointmentDate { get; set; }
     public TimeSpan StartTime { get; set; }
-    public TimeSpan EndTime { get; set; }
     public string? Notes { get; set; }
     public string? CancellationReason { get; set; }
     public string? CheckInCode { get; set; }

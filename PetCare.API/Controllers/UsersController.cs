@@ -91,6 +91,27 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Create staff account (Admin only)
+    /// </summary>
+    [HttpPost("staff")]
+    public async Task<IActionResult> CreateStaff([FromBody] CreateStaffUserDto createStaffUserDto)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var result = await _userService.CreateStaffAccountAsync(createStaffUserDto);
+
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
+    }
+
+    /// <summary>
     /// Update user
     /// </summary>
     [HttpPut("{id}")]

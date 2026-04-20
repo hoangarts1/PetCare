@@ -118,8 +118,7 @@ public class AdminDashboardController : ControllerBase
                 p.StockQuantity,
                 CategoryName = p.Category != null ? p.Category.CategoryName : null,
                 p.IsActive,
-                p.Price,
-                p.SalePrice
+                p.Price
             })
             .ToListAsync();
 

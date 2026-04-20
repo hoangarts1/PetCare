@@ -82,11 +82,4 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         return sb.ToString().Normalize(NormalizationForm.FormC).ToLower();
     }
 
-    public async Task<Product?> GetProductBySkuAsync(string sku)
-    {
-        return await _dbSet
-            .Include(p => p.Category)
-
-            .FirstOrDefaultAsync(p => p.Sku == sku);
-    }
 }

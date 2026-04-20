@@ -14,22 +14,13 @@ public class UpdateProductDto
     [Range(0, double.MaxValue)]
     public decimal? Price { get; set; }
 
-    public decimal? SalePrice { get; set; }
-
     [Range(0, int.MaxValue)]
     public int? StockQuantity { get; set; }
-
-    [MaxLength(100)]
-    public string? Sku { get; set; }
-
-    public decimal? Weight { get; set; }
     
     [MaxLength(50)]
     public string? Dimensions { get; set; }
     
     public bool? IsActive { get; set; }
-
-    public Guid? ProviderId { get; set; }
 
     public List<string>? ImageUrls { get; set; }
 }

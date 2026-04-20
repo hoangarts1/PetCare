@@ -16,22 +16,13 @@ public class CreateProductDto
     [Range(0, double.MaxValue, ErrorMessage = "Price must be greater than or equal to 0")]
     public decimal Price { get; set; }
 
-    public decimal? SalePrice { get; set; }
-
     [Range(0, int.MaxValue, ErrorMessage = "Stock quantity must be greater than or equal to 0")]
     public int StockQuantity { get; set; } = 0;
-
-    [MaxLength(100)]
-    public string? Sku { get; set; }
-
-    public decimal? Weight { get; set; }
     
     [MaxLength(50)]
     public string? Dimensions { get; set; }
     
     public bool IsActive { get; set; } = true;
-
-    public Guid? ProviderId { get; set; }
     
     public List<string> ImageUrls { get; set; } = new();
 }

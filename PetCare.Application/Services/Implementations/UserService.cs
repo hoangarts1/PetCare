@@ -117,6 +117,55 @@ public class UserService : IUserService
         }
     }
 
+    public async Task<ServiceResult<UserDto>> CreateStaffAccountAsync(CreateStaffUserDto createStaffUserDto)
+    {
+        try
+        {
+            if (await _unitOfWork.Users.EmailExistsAsync(createStaffUserDto.Email))
+            {
+                return ServiceResult<UserDto>.FailureResult("Email already exists");
+            }
+
+            if (string.IsNullOrWhiteSpace(createStaffUserDto.Password))
+            {
+                return ServiceResult<UserDto>.FailureResult("Password is required");
+            }
+
+            var roleRepository = _unitOfWork.Repository<Role>();
+            var staffRole = await roleRepository.FirstOrDefaultAsync(r => r.RoleName.ToLower() == "staff");
+            if (staffRole == null)
+            {
+                return ServiceResult<UserDto>.FailureResult("Staff role not found");
+            }
+
+            var user = new User
+            {
+                Email = createStaffUserDto.Email,
+                Phone = createStaffUserDto.Phone,
+                FullName = createStaffUserDto.FullName,
+                AvatarUrl = createStaffUserDto.AvatarUrl,
+                Address = createStaffUserDto.Address,
+                City = createStaffUserDto.City,
+                District = createStaffUserDto.District,
+                RoleId = staffRole.Id,
+                Role = staffRole,
+                IsActive = true,
+                PasswordHash = BCryptNet.HashPassword(createStaffUserDto.Password)
+            };
+
+            await _unitOfWork.Users.AddAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            var userDto = _mapper.Map<UserDto>(user);
+            userDto.RoleName = staffRole.RoleName;
+            return ServiceResult<UserDto>.SuccessResult(userDto, "Staff account created successfully");
+        }
+        catch (Exception ex)
+        {
+            return ServiceResult<UserDto>.FailureResult($"Error creating staff account: {ex.Message}");
+        }
+    }
+
     public async Task<ServiceResult<UserDto>> UpdateUserAsync(Guid userId, UpdateUserDto updateUserDto)
     {
         try

@@ -25,8 +25,6 @@ public class MappingProfile : Profile
         // Product mappings
         CreateMap<Product, ProductDto>()
             .ForMember(dest => dest.CategoryName, opt => opt.MapFrom(src => src.Category != null ? src.Category.CategoryName : null))
-            .ForMember(dest => dest.ProviderName, opt => opt.MapFrom(src => src.Provider != null ? src.Provider.FullName : null))
-            .ForMember(dest => dest.SalePrice, opt => opt.MapFrom(_ => (decimal?)null))
             .ForMember(dest => dest.Images, opt => opt.MapFrom(src => src.Images.OrderBy(i => i.DisplayOrder).Select(i => i.ImageUrl).ToList()))
             .ForMember(dest => dest.ImageUrls, opt => opt.MapFrom(src => src.Images.OrderBy(i => i.DisplayOrder).Select(i => i.ImageUrl).ToList()));
              
@@ -42,7 +40,6 @@ public class MappingProfile : Profile
         // Appointment mappings
         CreateMap<Appointment, AppointmentDto>()
             .ForMember(dest => dest.Pet, opt => opt.MapFrom(src => src.Pet))
-            .ForMember(dest => dest.ServiceName, opt => opt.MapFrom(src => src.Service != null ? src.Service.ServiceName : null))
             .ForMember(dest => dest.StaffName, opt => opt.MapFrom(src => src.AssignedStaff != null ? src.AssignedStaff.FullName : null));
 
         // Product Category mappings

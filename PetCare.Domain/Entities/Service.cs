@@ -12,6 +12,5 @@ public class Service : BaseEntity
     public bool IsActive { get; set; } = true;
 
     // Navigation properties
-    public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
     public virtual ICollection<StaffService> StaffServices { get; set; } = new List<StaffService>();
 }

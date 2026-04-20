@@ -8,18 +8,11 @@ public class Product : AuditableEntity
     public string ProductName { get; set; } = string.Empty;
     public string? Description { get; set; }
     public decimal Price { get; set; }
-    public decimal? SalePrice { get; set; }
     public int StockQuantity { get; set; } = 0;
-    public string? Sku { get; set; }
-    public decimal? Weight { get; set; }
     public string? Dimensions { get; set; }
     public bool IsActive { get; set; } = true;
 
-    // Product Provider (supplier who provides the product to staff)
-    public Guid? ProviderId { get; set; }
-
     // Navigation properties
-    public virtual User? Provider { get; set; }
     public virtual ProductCategory? Category { get; set; }
 
     public virtual ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();

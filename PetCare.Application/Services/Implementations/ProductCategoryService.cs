@@ -30,7 +30,6 @@ public class ProductCategoryService : IProductCategoryService
         try
         {
             var category = await _context.ProductCategories
-                .Include(c => c.SubCategories)
                 .Include(c => c.Products)
                 .FirstOrDefaultAsync(c => c.Id == categoryId);
 
@@ -85,56 +84,14 @@ public class ProductCategoryService : IProductCategoryService
     {
         try
         {
-            var allCategories = await _context.ProductCategories
+            var categories = await _context.ProductCategories
                 .Include(c => c.Products)
                 .Where(c => c.IsActive)
                 .OrderBy(c => c.DisplayOrder)
+                .ThenBy(c => c.CategoryName)
                 .ToListAsync();
 
-            var rootCategories = allCategories.Where(c => c.ParentCategoryId == null).ToList();
-            var dtos = BuildCategoryTree(rootCategories, allCategories);
-
-            return ServiceResult<List<ProductCategoryDto>>.SuccessResult(dtos);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error getting category hierarchy");
-            return ServiceResult<List<ProductCategoryDto>>.FailureResult($"Error retrieving category hierarchy: {ex.Message}");
-        }
-    }
-
-    private List<ProductCategoryDto> BuildCategoryTree(List<ProductCategory> rootCategories, List<ProductCategory> allCategories)
-    {
-        var dtos = new List<ProductCategoryDto>();
-
-        foreach (var category in rootCategories)
-        {
-            var dto = _mapper.Map<ProductCategoryDto>(category);
-            dto.ProductCount = category.Products.Count;
-
-            var children = allCategories.Where(c => c.ParentCategoryId == category.Id).ToList();
-            if (children.Any())
-            {
-                dto.SubCategories = BuildCategoryTree(children, allCategories);
-            }
-
-            dtos.Add(dto);
-        }
-
-        return dtos;
-    }
-
-    public async Task<ServiceResult<List<ProductCategoryDto>>> GetSubCategoriesAsync(Guid parentCategoryId)
-    {
-        try
-        {
-            var subCategories = await _context.ProductCategories
-                .Include(c => c.Products)
-                .Where(c => c.ParentCategoryId == parentCategoryId && c.IsActive)
-                .OrderBy(c => c.DisplayOrder)
-                .ToListAsync();
-
-            var dtos = subCategories.Select(c =>
+            var dtos = categories.Select(c =>
             {
                 var dto = _mapper.Map<ProductCategoryDto>(c);
                 dto.ProductCount = c.Products.Count;
@@ -145,8 +102,8 @@ public class ProductCategoryService : IProductCategoryService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting subcategories for parent: {ParentCategoryId}", parentCategoryId);
-            return ServiceResult<List<ProductCategoryDto>>.FailureResult($"Error retrieving subcategories: {ex.Message}");
+            _logger.LogError(ex, "Error getting category hierarchy");
+            return ServiceResult<List<ProductCategoryDto>>.FailureResult($"Error retrieving category hierarchy: {ex.Message}");
         }
     }
 
@@ -154,19 +111,9 @@ public class ProductCategoryService : IProductCategoryService
     {
         try
         {
-            if (dto.ParentCategoryId.HasValue)
-            {
-                var parentExists = await _context.ProductCategories
-                    .AnyAsync(c => c.Id == dto.ParentCategoryId.Value);
-                
-                if (!parentExists)
-                    return ServiceResult<ProductCategoryDto>.FailureResult("Parent category not found");
-            }
-
             var category = new ProductCategory
             {
                 CategoryName = dto.CategoryName,
-                ParentCategoryId = dto.ParentCategoryId,
                 Description = dto.Description,
                 ImageUrl = dto.ImageUrl,
                 DisplayOrder = dto.DisplayOrder,
@@ -198,20 +145,6 @@ public class ProductCategoryService : IProductCategoryService
 
             if (category == null)
                 return ServiceResult<ProductCategoryDto>.FailureResult("Category not found");
-
-            if (dto.ParentCategoryId.HasValue)
-            {
-                if (dto.ParentCategoryId.Value == categoryId)
-                    return ServiceResult<ProductCategoryDto>.FailureResult("Category cannot be its own parent");
-
-                var parentExists = await _context.ProductCategories
-                    .AnyAsync(c => c.Id == dto.ParentCategoryId.Value);
-                
-                if (!parentExists)
-                    return ServiceResult<ProductCategoryDto>.FailureResult("Parent category not found");
-
-                category.ParentCategoryId = dto.ParentCategoryId;
-            }
 
             if (!string.IsNullOrWhiteSpace(dto.CategoryName))
                 category.CategoryName = dto.CategoryName;
@@ -250,7 +183,6 @@ public class ProductCategoryService : IProductCategoryService
         {
             var category = await _context.ProductCategories
                 .Include(c => c.Products)
-                .Include(c => c.SubCategories)
                 .FirstOrDefaultAsync(c => c.Id == categoryId);
 
             if (category == null)
@@ -258,9 +190,6 @@ public class ProductCategoryService : IProductCategoryService
 
             if (category.Products.Any())
                 return ServiceResult<bool>.FailureResult("Cannot delete category with existing products");
-
-            if (category.SubCategories.Any())
-                return ServiceResult<bool>.FailureResult("Cannot delete category with subcategories");
 
             _context.ProductCategories.Remove(category);
             await _context.SaveChangesAsync();

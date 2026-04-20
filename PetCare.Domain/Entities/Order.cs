@@ -8,8 +8,6 @@ public class Order : AuditableEntity
     public string OrderNumber { get; set; } = string.Empty;
     public string OrderStatus { get; set; } = "pending";
     public decimal TotalAmount { get; set; }
-    public decimal ShippingFee { get; set; } = 0;
-    public decimal DiscountAmount { get; set; } = 0;
     public decimal FinalAmount { get; set; }
     public string? PaymentMethod { get; set; }
     public string PaymentStatus { get; set; } = "unpaid";

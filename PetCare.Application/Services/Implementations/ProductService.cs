@@ -117,47 +117,10 @@ public class ProductService : IProductService
         }
     }
 
-    public async Task<ServiceResult<IEnumerable<ProductDto>>> GetProductsByProviderAsync(Guid providerId)
-    {
-        try
-        {
-            var provider = await _unitOfWork.Users.GetByIdAsync(providerId);
-            if (provider == null)
-            {
-                return ServiceResult<IEnumerable<ProductDto>>.FailureResult("Provider not found");
-            }
-
-            var products = await _unitOfWork.Products
-                .QueryWithIncludes(p => p.Category!, p => p.Images)
-                .Where(p => p.ProviderId == providerId)
-                .ToListAsync();
-
-            var productDtos = _mapper.Map<IEnumerable<ProductDto>>(products);
-            return ServiceResult<IEnumerable<ProductDto>>.SuccessResult(productDtos);
-        }
-        catch (Exception ex)
-        {
-            return ServiceResult<IEnumerable<ProductDto>>.FailureResult($"Error retrieving products by provider: {ex.Message}");
-        }
-    }
-
-
     public async Task<ServiceResult<ProductDto>> CreateProductAsync(CreateProductDto createProductDto)
     {
         try
         {
-            if (createProductDto.SalePrice.HasValue)
-            {
-                if (createProductDto.SalePrice.Value <= 0)
-                {
-                    createProductDto.SalePrice = null;
-                }
-                else if (createProductDto.SalePrice.Value >= createProductDto.Price)
-                {
-                    return ServiceResult<ProductDto>.FailureResult("Sale price must be greater than 0 and less than the base price.");
-                }
-            }
-
             // Validate that CategoryId exists to avoid FK constraint violations
             if (createProductDto.CategoryId.HasValue && createProductDto.CategoryId.Value != Guid.Empty)
             {
@@ -171,16 +134,6 @@ public class ProductService : IProductService
             {
                 // CategoryId is required
                 return ServiceResult<ProductDto>.FailureResult("A valid CategoryId is required.");
-            }
-
-            // Validate ProviderId if provided
-            if (createProductDto.ProviderId.HasValue && createProductDto.ProviderId.Value != Guid.Empty)
-            {
-                var provider = await _unitOfWork.Users.GetByIdAsync(createProductDto.ProviderId.Value);
-                if (provider == null)
-                {
-                    return ServiceResult<ProductDto>.FailureResult($"Provider with ID '{createProductDto.ProviderId}' does not exist.");
-                }
             }
 
             var product = _mapper.Map<Product>(createProductDto);
@@ -228,23 +181,6 @@ public class ProductService : IProductService
                 return ServiceResult<ProductDto>.FailureResult("Product not found");
             }
 
-            if (updateProductDto.SalePrice.HasValue)
-            {
-                if (updateProductDto.SalePrice.Value <= 0)
-                {
-                    product.SalePrice = null;
-                    updateProductDto.SalePrice = null;
-                }
-                else
-                {
-                    var effectivePrice = updateProductDto.Price ?? product.Price;
-                    if (updateProductDto.SalePrice.Value >= effectivePrice)
-                    {
-                        return ServiceResult<ProductDto>.FailureResult("Sale price must be greater than 0 and less than the base price.");
-                    }
-                }
-            }
-
             _mapper.Map(updateProductDto, product);
 
             if (updateProductDto.ImageUrls != null)
@@ -275,11 +211,6 @@ public class ProductService : IProductService
                 {
                     await context.ProductImages.AddRangeAsync(newImages);
                 }
-            }
-
-            if (product.SalePrice.HasValue && product.SalePrice.Value <= 0)
-            {
-                product.SalePrice = null;
             }
 
             await _unitOfWork.Products.UpdateAsync(product);

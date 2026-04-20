@@ -52,16 +52,6 @@ public class ProductCategoriesController : ControllerBase
     }
 
     /// <summary>
-    /// Get subcategories of a parent category
-    /// </summary>
-    [HttpGet("{parentId}/subcategories")]
-    public async Task<IActionResult> GetSubCategories(Guid parentId)
-    {
-        var result = await _categoryService.GetSubCategoriesAsync(parentId);
-        return Ok(result);
-    }
-
-    /// <summary>
     /// Create new category (Admin/Staff)
     /// </summary>
     [HttpPost]

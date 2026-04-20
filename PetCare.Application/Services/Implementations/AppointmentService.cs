@@ -201,27 +201,14 @@ public class AppointmentService : IAppointmentService
                 return ServiceResult<AppointmentResponseDto>.FailureResult("Dịch vụ tại nhà đã bị tắt. Chỉ hỗ trợ dịch vụ tại trung tâm.");
             }
 
-            Service? service = null;
-            if (dto.ServiceId.HasValue)
-            {
-                service = await _unitOfWork.Services.GetByIdAsync(dto.ServiceId.Value);
-                if (service == null)
-                    return ServiceResult<AppointmentResponseDto>.FailureResult("Service not found");
-
-                if (service.IsHomeService)
-                    return ServiceResult<AppointmentResponseDto>.FailureResult("Dịch vụ tại nhà đã bị tắt. Vui lòng đặt lịch tại trung tâm.");
-            }
-
             var appointment = new Appointment
             {
                 UserId = userId,
                 Pet = string.IsNullOrWhiteSpace(dto.Pet) ? null : dto.Pet.Trim(),
-                ServiceId = dto.ServiceId,
                 AppointmentType = dto.AppointmentType,
                 AppointmentStatus = "pending",
                 AppointmentDate = DateTime.SpecifyKind(dto.AppointmentDate, DateTimeKind.Utc),
                 StartTime = dto.StartTime,
-                EndTime = dto.EndTime,
                 ServiceAddress = null,
                 CheckInCode = await GenerateCheckInCodeAsync(dto.AppointmentDate),
                 Notes = dto.Notes
@@ -248,7 +235,7 @@ public class AppointmentService : IAppointmentService
                     await _emailService.SendEmailAsync(
                         user.Email,
                         "Đặt lịch hẹn thành công - PetCare",
-                        BuildBookingConfirmationEmailBody(user.FullName, appointment.AppointmentDate, appointment.StartTime, service?.ServiceName)
+                        BuildBookingConfirmationEmailBody(user.FullName, appointment.AppointmentDate, appointment.StartTime, null)
                     );
                 }
             }
@@ -542,15 +529,6 @@ public class AppointmentService : IAppointmentService
             })
             .ToList();
 
-        if (requestedServices.Count == 0 && appointment.ServiceId.HasValue)
-        {
-            requestedServices.Add(new
-            {
-                ServiceId = appointment.ServiceId.Value,
-                Quantity = 1
-            });
-        }
-
         if (requestedServices.Count == 0)
             return ServiceResult<AppointmentResponseDto>.FailureResult("Vui lòng chọn ít nhất 1 dịch vụ");
 
@@ -567,7 +545,6 @@ public class AppointmentService : IAppointmentService
             selectedServices.Add((service, requested.Quantity));
         }
 
-        var primaryService = selectedServices[0].Service;
         var totalAmount = selectedServices.Sum(item => item.Service.Price * item.Quantity);
         var selectedServiceNames = selectedServices.Select(item => item.Service.ServiceName).ToList();
 
@@ -575,7 +552,6 @@ public class AppointmentService : IAppointmentService
         appointment.AppointmentStatus = "in-progress";
         appointment.StartedAt = DateTime.UtcNow;
         appointment.UpdatedAt = DateTime.UtcNow;
-        appointment.ServiceId = primaryService.Id;
         appointment.TotalAmount = totalAmount;
 
         var selectedServicesNote = $"Dich vu da chon khi check-in: {string.Join(", ", selectedServiceNames)}";
@@ -611,9 +587,6 @@ public class AppointmentService : IAppointmentService
 
         if (appointment.AppointmentStatus != "in-progress")
             return ServiceResult<AppointmentResponseDto>.FailureResult("Chỉ có thể hoàn thành khi lịch ở trạng thái in-progress");
-
-        if (!appointment.TotalAmount.HasValue && appointment.Service != null)
-            appointment.TotalAmount = appointment.Service.Price;
 
         appointment.AppointmentStatus = "completed";
         appointment.AssignedStaffId = staffId;
@@ -669,19 +642,7 @@ public class AppointmentService : IAppointmentService
             return ServiceResult<AppointmentBillDto>.FailureResult("You do not have permission to view this bill");
 
         var items = new List<AppointmentServiceItemResponseDto>();
-        if (appointment.Service != null)
-        {
-            items.Add(new AppointmentServiceItemResponseDto
-            {
-                ServiceId = appointment.Service.Id,
-                ServiceName = appointment.Service.ServiceName,
-                Quantity = 1,
-                UnitPrice = appointment.Service.Price,
-                LineTotal = appointment.Service.Price
-            });
-        }
-
-        var total = appointment.TotalAmount ?? items.Sum(i => i.LineTotal);
+        var total = appointment.TotalAmount ?? 0m;
 
         var bill = new AppointmentBillDto
         {
@@ -772,16 +733,12 @@ public class AppointmentService : IAppointmentService
         UserId = a.UserId,
         UserName = a.User?.FullName ?? string.Empty,
         Pet = a.Pet,
-        ServiceId = a.ServiceId,
-        ServiceName = a.Service?.ServiceName,
-        ServicePrice = a.Service?.Price,
         AppointmentType = a.AppointmentType,
         AppointmentStatus = a.AppointmentStatus,
         AssignedStaffId = a.AssignedStaffId,
         AssignedStaffName = a.AssignedStaff?.FullName,
         AppointmentDate = a.AppointmentDate,
         StartTime = a.StartTime,
-        EndTime = a.EndTime,
         Notes = a.Notes,
         CancellationReason = a.CancellationReason,
         CheckInCode = a.CheckInCode,

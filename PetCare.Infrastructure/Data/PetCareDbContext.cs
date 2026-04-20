@@ -98,18 +98,12 @@ public class PetCareDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.CategoryName).HasColumnName("category_name").IsRequired().HasMaxLength(100);
-            entity.Property(e => e.ParentCategoryId).HasColumnName("parent_category_id");
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.ImageUrl).HasColumnName("image_url");
             entity.Property(e => e.DisplayOrder).HasColumnName("display_order");
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
-
-            entity.HasOne(e => e.ParentCategory)
-                .WithMany(c => c.SubCategories)
-                .HasForeignKey(e => e.ParentCategoryId)
-                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Product>(entity =>
@@ -122,10 +116,7 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.ProductName).HasColumnName("product_name").IsRequired().HasMaxLength(255);
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.Price).HasColumnName("price").HasPrecision(12, 2);
-            entity.Property(e => e.SalePrice).HasColumnName("sale_price").HasPrecision(12, 2);
             entity.Property(e => e.StockQuantity).HasColumnName("stock_quantity");
-            entity.Property(e => e.Sku).HasColumnName("sku").HasMaxLength(100);
-            entity.Property(e => e.Weight).HasColumnName("weight").HasPrecision(8, 2);
             entity.Property(e => e.Dimensions).HasColumnName("dimensions").HasMaxLength(50);
             entity.Property(e => e.IsActive).HasColumnName("is_active");
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
@@ -136,7 +127,6 @@ public class PetCareDbContext : DbContext
                 .HasForeignKey(e => e.CategoryId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(e => e.Sku).IsUnique();
             entity.HasIndex(e => e.CategoryId);
         });
 
@@ -192,8 +182,6 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.OrderNumber).HasColumnName("order_number").IsRequired().HasMaxLength(50);
             entity.Property(e => e.OrderStatus).HasColumnName("order_status").IsRequired().HasMaxLength(50);
             entity.Property(e => e.TotalAmount).HasColumnName("total_amount").HasPrecision(12, 2);
-            entity.Property(e => e.ShippingFee).HasColumnName("shipping_fee").HasPrecision(10, 2);
-            entity.Property(e => e.DiscountAmount).HasColumnName("discount_amount").HasPrecision(10, 2);
             entity.Property(e => e.FinalAmount).HasColumnName("final_amount").HasPrecision(12, 2);
             entity.Property(e => e.PaymentMethod).HasColumnName("payment_method").HasMaxLength(50);
             entity.Property(e => e.PaymentStatus).HasColumnName("payment_status").HasMaxLength(50);
@@ -311,13 +299,11 @@ public class PetCareDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.UserId).HasColumnName("user_id");
             entity.Property(e => e.Pet).HasColumnName("pet").HasMaxLength(100);
-            entity.Property(e => e.ServiceId).HasColumnName("service_id");
             entity.Property(e => e.AppointmentType).HasColumnName("appointment_type").IsRequired().HasMaxLength(50);
             entity.Property(e => e.AppointmentStatus).HasColumnName("appointment_status").HasMaxLength(50);
             entity.Property(e => e.AssignedStaffId).HasColumnName("assigned_staff_id");
             entity.Property(e => e.AppointmentDate).HasColumnName("appointment_date");
             entity.Property(e => e.StartTime).HasColumnName("start_time");
-            entity.Property(e => e.EndTime).HasColumnName("end_time");
             entity.Property(e => e.ServiceAddress).HasColumnName("service_address");
             entity.Property(e => e.Notes).HasColumnName("notes");
             entity.Property(e => e.CancellationReason).HasColumnName("cancellation_reason");
@@ -333,11 +319,6 @@ public class PetCareDbContext : DbContext
             entity.HasOne(e => e.User)
                 .WithMany(u => u.Appointments)
                 .HasForeignKey(e => e.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasOne(e => e.Service)
-                .WithMany(s => s.Appointments)
-                .HasForeignKey(e => e.ServiceId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.AssignedStaff)
