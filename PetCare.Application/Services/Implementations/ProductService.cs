@@ -222,7 +222,7 @@ public class ProductService : IProductService
     {
         try
         {
-            var product = await _unitOfWork.Products.GetByIdAsync(productId);
+            var product = await _unitOfWork.Products.GetProductWithImagesAsync(productId);
             if (product == null)
             {
                 return ServiceResult<ProductDto>.FailureResult("Product not found");
@@ -246,6 +246,32 @@ public class ProductService : IProductService
             }
 
             _mapper.Map(updateProductDto, product);
+
+            if (updateProductDto.ImageUrls != null)
+            {
+                var context = _unitOfWork.GetContext();
+                var existingImages = product.Images.ToList();
+                if (existingImages.Any())
+                {
+                    context.ProductImages.RemoveRange(existingImages);
+                    product.Images.Clear();
+                }
+
+                int order = 0;
+                foreach (var imageUrl in updateProductDto.ImageUrls
+                             .Where(url => !string.IsNullOrWhiteSpace(url))
+                             .Select(url => url.Trim()))
+                {
+                    product.Images.Add(new ProductImage
+                    {
+                        ProductId = product.Id,
+                        ImageUrl = imageUrl,
+                        DisplayOrder = order,
+                        IsPrimary = order == 0,
+                    });
+                    order++;
+                }
+            }
 
             if (product.SalePrice.HasValue && product.SalePrice.Value <= 0)
             {

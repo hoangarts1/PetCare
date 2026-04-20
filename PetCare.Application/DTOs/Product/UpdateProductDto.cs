@@ -30,4 +30,6 @@ public class UpdateProductDto
     public bool? IsActive { get; set; }
 
     public Guid? ProviderId { get; set; }
+
+    public List<string>? ImageUrls { get; set; }
 }
