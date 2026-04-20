@@ -222,7 +222,7 @@ public class ProductService : IProductService
     {
         try
         {
-            var product = await _unitOfWork.Products.GetProductWithImagesAsync(productId);
+            var product = await _unitOfWork.Products.GetByIdAsync(productId);
             if (product == null)
             {
                 return ServiceResult<ProductDto>.FailureResult("Product not found");
@@ -250,26 +250,30 @@ public class ProductService : IProductService
             if (updateProductDto.ImageUrls != null)
             {
                 var context = _unitOfWork.GetContext();
-                var existingImages = product.Images.ToList();
+                var existingImages = await context.ProductImages
+                    .Where(img => img.ProductId == productId)
+                    .ToListAsync();
+
                 if (existingImages.Any())
                 {
                     context.ProductImages.RemoveRange(existingImages);
-                    product.Images.Clear();
                 }
 
-                int order = 0;
-                foreach (var imageUrl in updateProductDto.ImageUrls
-                             .Where(url => !string.IsNullOrWhiteSpace(url))
-                             .Select(url => url.Trim()))
-                {
-                    product.Images.Add(new ProductImage
+                var newImages = updateProductDto.ImageUrls
+                    .Where(url => !string.IsNullOrWhiteSpace(url))
+                    .Select(url => url.Trim())
+                    .Select((imageUrl, index) => new ProductImage
                     {
                         ProductId = product.Id,
                         ImageUrl = imageUrl,
-                        DisplayOrder = order,
-                        IsPrimary = order == 0,
-                    });
-                    order++;
+                        DisplayOrder = index,
+                        IsPrimary = index == 0,
+                    })
+                    .ToList();
+
+                if (newImages.Any())
+                {
+                    await context.ProductImages.AddRangeAsync(newImages);
                 }
             }
 
@@ -278,9 +282,12 @@ public class ProductService : IProductService
                 product.SalePrice = null;
             }
 
+            await _unitOfWork.Products.UpdateAsync(product);
+
             await _unitOfWork.SaveChangesAsync();
 
-            var productDto = _mapper.Map<ProductDto>(product);
+            var refreshedProduct = await _unitOfWork.Products.GetProductWithImagesAsync(productId);
+            var productDto = _mapper.Map<ProductDto>(refreshedProduct ?? product);
             return ServiceResult<ProductDto>.SuccessResult(productDto, "Product updated successfully");
         }
         catch (Exception ex)
