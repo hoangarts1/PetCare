@@ -35,6 +35,9 @@ public class PetCareDbContext : DbContext
 
     // Payments
     public DbSet<Payment> Payments { get; set; }
+    public DbSet<Wallet> Wallets { get; set; }
+    public DbSet<WalletTransaction> WalletTransactions { get; set; }
+    public DbSet<WalletWithdrawalRequest> WalletWithdrawalRequests { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,6 +50,7 @@ public class PetCareDbContext : DbContext
         ConfigureServiceEntities(modelBuilder);
         ConfigureNotificationEntities(modelBuilder);
         ConfigurePaymentEntities(modelBuilder);
+        ConfigureWalletEntities(modelBuilder);
     }
 
     private void ConfigureUserEntities(ModelBuilder modelBuilder)
@@ -440,6 +444,97 @@ public class PetCareDbContext : DbContext
             entity.HasIndex(e => e.OrderId);
             entity.HasIndex(e => e.UserId);
             entity.HasIndex(e => e.TransactionId);
+        });
+    }
+
+    private void ConfigureWalletEntities(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Wallet>(entity =>
+        {
+            entity.ToTable("wallets");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Balance).HasColumnName("balance").HasPrecision(12, 2);
+            entity.Property(e => e.PendingWithdrawal).HasColumnName("pending_withdrawal").HasPrecision(12, 2);
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            entity.HasOne(e => e.User)
+                .WithOne(u => u.Wallet)
+                .HasForeignKey<Wallet>(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(e => e.UserId).IsUnique();
+        });
+
+        modelBuilder.Entity<WalletTransaction>(entity =>
+        {
+            entity.ToTable("wallet_transactions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.WalletId).HasColumnName("wallet_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.TransactionType).HasColumnName("transaction_type").IsRequired().HasMaxLength(30);
+            entity.Property(e => e.Status).HasColumnName("status").IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Amount).HasColumnName("amount").HasPrecision(12, 2);
+            entity.Property(e => e.BalanceBefore).HasColumnName("balance_before").HasPrecision(12, 2);
+            entity.Property(e => e.BalanceAfter).HasColumnName("balance_after").HasPrecision(12, 2);
+            entity.Property(e => e.ReferenceType).HasColumnName("reference_type").HasMaxLength(30);
+            entity.Property(e => e.ReferenceId).HasColumnName("reference_id");
+            entity.Property(e => e.Description).HasColumnName("description");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            entity.HasOne(e => e.Wallet)
+                .WithMany(w => w.Transactions)
+                .HasForeignKey(e => e.WalletId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.WalletTransactions)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.WalletId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => new { e.ReferenceType, e.ReferenceId });
+        });
+
+        modelBuilder.Entity<WalletWithdrawalRequest>(entity =>
+        {
+            entity.ToTable("wallet_withdrawal_requests");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.WalletId).HasColumnName("wallet_id");
+            entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.Amount).HasColumnName("amount").HasPrecision(12, 2);
+            entity.Property(e => e.Status).HasColumnName("status").IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Note).HasColumnName("note");
+            entity.Property(e => e.RejectionReason).HasColumnName("rejection_reason");
+            entity.Property(e => e.ReviewedBy).HasColumnName("reviewed_by");
+            entity.Property(e => e.ReviewedAt).HasColumnName("reviewed_at");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+
+            entity.HasOne(e => e.Wallet)
+                .WithMany(w => w.WithdrawalRequests)
+                .HasForeignKey(e => e.WalletId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.WalletWithdrawalRequests)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ReviewedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.ReviewedBy)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.WalletId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Status);
         });
     }
 

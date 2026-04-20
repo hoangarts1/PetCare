@@ -126,7 +126,7 @@ public class CheckoutController : ControllerBase
         }
 
         var paymentMethod = (dto.PaymentMethod ?? "cod").Trim().ToLowerInvariant();
-        if (paymentMethod != "cod" && paymentMethod != "payos")
+        if (paymentMethod != "cod" && paymentMethod != "payos" && paymentMethod != "wallet")
         {
             return BadRequest(new
             {
@@ -197,6 +197,37 @@ public class CheckoutController : ControllerBase
             });
         }
 
+        Wallet? wallet = null;
+        if (paymentMethod == "wallet")
+        {
+            wallet = await _context.Wallets.FirstOrDefaultAsync(item => item.UserId == userId);
+            if (wallet == null)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Wallet not found. Please top up first."
+                });
+            }
+
+            var availableBalance = wallet.Balance - wallet.PendingWithdrawal;
+            if (availableBalance < finalAmount)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Insufficient wallet balance. Please top up more before paying with wallet.",
+                    data = new
+                    {
+                        walletBalance = wallet.Balance,
+                        wallet.PendingWithdrawal,
+                        availableBalance,
+                        requiredAmount = finalAmount
+                    }
+                });
+            }
+        }
+
         var order = new Order
         {
             UserId = userId,
@@ -205,7 +236,7 @@ public class CheckoutController : ControllerBase
             TotalAmount = totalAmount,
             FinalAmount = finalAmount,
             PaymentMethod = paymentMethod,
-            PaymentStatus = paymentMethod == "cod" ? "pending" : "unpaid",
+            PaymentStatus = paymentMethod == "cod" ? "pending" : paymentMethod == "wallet" ? "paid" : "unpaid",
             ShippingName = dto.ShippingName.Trim(),
             ShippingPhone = dto.ShippingPhone.Trim(),
             ShippingAddress = dto.ShippingAddress.Trim(),
@@ -299,14 +330,39 @@ public class CheckoutController : ControllerBase
             {
                 OrderId = order.Id,
                 UserId = userId,
-                PaymentMethod = "cod",
-                PaymentStatus = "pending",
+                PaymentMethod = paymentMethod,
+                PaymentStatus = paymentMethod == "wallet" ? "completed" : "pending",
                 Amount = finalAmount,
+                PaidAt = paymentMethod == "wallet" ? DateTime.UtcNow : null,
                 CreatedAt = now,
                 UpdatedAt = now
             };
 
             await _context.Payments.AddAsync(payment);
+
+            if (paymentMethod == "wallet" && wallet != null)
+            {
+                var balanceBefore = wallet.Balance;
+                wallet.Balance -= finalAmount;
+                wallet.UpdatedAt = now;
+                order.OrderStatus = "confirmed";
+
+                await _context.WalletTransactions.AddAsync(new WalletTransaction
+                {
+                    WalletId = wallet.Id,
+                    UserId = userId,
+                    TransactionType = "purchase",
+                    Status = "completed",
+                    Amount = finalAmount,
+                    BalanceBefore = balanceBefore,
+                    BalanceAfter = wallet.Balance,
+                    ReferenceType = "order",
+                    ReferenceId = order.Id,
+                    Description = $"Wallet payment for order {order.OrderNumber}",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
         }
 
         _context.CartItems.RemoveRange(cartItems);

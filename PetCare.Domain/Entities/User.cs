@@ -19,6 +19,9 @@ public class User : AuditableEntity
     public virtual Role? Role { get; set; }
     public virtual ICollection<Order> Orders { get; set; } = new List<Order>();
     public virtual ICollection<Appointment> Appointments { get; set; } = new List<Appointment>();
+    public virtual Wallet? Wallet { get; set; }
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
+    public virtual ICollection<WalletWithdrawalRequest> WalletWithdrawalRequests { get; set; } = new List<WalletWithdrawalRequest>();
     public virtual ICollection<CartItem> CartItems { get; set; } = new List<CartItem>();
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
     public virtual ICollection<RatingFeedback> RatingFeedbacks { get; set; } = new List<RatingFeedback>();
