@@ -44,7 +44,14 @@ public class ImagesController : ControllerBase
 
         if (result.Success)
         {
-            return Ok(new { imageUrl = result.Data, message = "Image uploaded successfully" });
+            var imageUrl = ToAbsoluteUrl(result.Data);
+            return Ok(new
+            {
+                success = true,
+                imageUrl,
+                data = new { imageUrl },
+                message = "Image uploaded successfully"
+            });
         }
 
         return BadRequest(new { message = result.Message });
@@ -79,7 +86,17 @@ public class ImagesController : ControllerBase
 
         if (result.Success)
         {
-            return Ok(new { imageUrls = result.Data, message = $"{result.Data!.Count} images uploaded successfully" });
+            var imageUrls = result.Data!
+                .Select(ToAbsoluteUrl)
+                .ToList();
+
+            return Ok(new
+            {
+                success = true,
+                imageUrls,
+                data = new { imageUrls },
+                message = $"{imageUrls.Count} images uploaded successfully"
+            });
         }
 
         return BadRequest(new { message = result.Message });
@@ -141,6 +158,33 @@ public class ImagesController : ControllerBase
 
         var optimizedUrl = _imageUploadService.GetOptimizedImageUrl(imageUrl, width, height, quality);
         return Ok(new { optimizedUrl });
+    }
+
+    private string ToAbsoluteUrl(string? imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl))
+        {
+            return string.Empty;
+        }
+
+        if (Uri.TryCreate(imageUrl, UriKind.Absolute, out _))
+        {
+            return imageUrl;
+        }
+
+        var scheme = Request.Scheme;
+        var host = Request.Host.Value;
+        if (string.IsNullOrWhiteSpace(host))
+        {
+            return imageUrl;
+        }
+
+        if (!imageUrl.StartsWith('/'))
+        {
+            imageUrl = "/" + imageUrl;
+        }
+
+        return $"{scheme}://{host}{imageUrl}";
     }
 
     /// <summary>

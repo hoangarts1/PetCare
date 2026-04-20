@@ -185,23 +185,16 @@ public class ProductService : IProductService
 
             var product = _mapper.Map<Product>(createProductDto);
             
-            // Handle Images manually if needed, or assume Mapper handles string -> ProductImage if configured
-            // For now, let's manually add images if the mapper doesn't support List<string> -> List<ProductImage> directly
-            // Handle Images manually
+            // Handle Images manually and persist image path/URL as provided by client.
             if (createProductDto.ImageUrls != null && createProductDto.ImageUrls.Any())
             {
                  int order = 0;
                  foreach(var url in createProductDto.ImageUrls)
                  {
-                     string finalUrl = url;
-                     // Auto-upload if not from Cloudinary
-                     if (!string.IsNullOrEmpty(url) && !url.Contains("cloudinary.com"))
+                     var finalUrl = url?.Trim();
+                     if (string.IsNullOrWhiteSpace(finalUrl))
                      {
-                         var uploadResult = await _imageUploadService.UploadImageFromUrlAsync(url, "products");
-                         if (uploadResult.Success)
-                         {
-                             finalUrl = uploadResult.Data!;
-                         }
+                         continue;
                      }
 
                      product.Images.Add(new ProductImage 
@@ -354,20 +347,10 @@ public class ProductService : IProductService
                 return ServiceResult<ProductDto>.FailureResult("Product not found");
             }
 
-            string finalUrl = imageUrl;
-            
-            // Auto-upload if not from Cloudinary
-            if (!string.IsNullOrEmpty(imageUrl) && !imageUrl.Contains("cloudinary.com"))
+            var finalUrl = imageUrl?.Trim();
+            if (string.IsNullOrWhiteSpace(finalUrl))
             {
-                var uploadResult = await _imageUploadService.UploadImageFromUrlAsync(imageUrl, "products");
-                if (uploadResult.Success)
-                {
-                    finalUrl = uploadResult.Data!;
-                }
-                else
-                {
-                    return ServiceResult<ProductDto>.FailureResult($"Failed to upload image: {uploadResult.Message}");
-                }
+                return ServiceResult<ProductDto>.FailureResult("Image URL/path is required");
             }
 
             // Get current max display order for this product
