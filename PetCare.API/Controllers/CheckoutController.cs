@@ -18,6 +18,7 @@ namespace PetCare.API.Controllers;
 public class CheckoutController : ControllerBase
 {
     private const decimal MembershipDiscountRate = 0.10m;
+    private const string StaffAdminRoles = "Staff,staff,Admin,admin";
 
     private readonly PetCareDbContext _context;
     private readonly PayOSClient? _payOS;
@@ -108,6 +109,102 @@ public class CheckoutController : ControllerBase
                 shippingFee = 0m,
                 finalAmount
             }
+        });
+    }
+
+    [HttpGet("my-orders")]
+    public async Task<IActionResult> GetMyOrders()
+    {
+        var userId = GetUserId();
+
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Where(order => order.UserId == userId)
+            .Include(order => order.OrderItems)
+            .OrderByDescending(order => order.OrderedAt)
+            .Select(order => new
+            {
+                order.Id,
+                order.OrderNumber,
+                order.OrderedAt,
+                order.FinalAmount,
+                order.OrderStatus,
+                order.PaymentStatus,
+                order.PaymentMethod,
+                order.ShippingName,
+                order.ShippingPhone,
+                order.ShippingAddress,
+                Note = order.Notes,
+                Items = order.OrderItems
+                    .OrderBy(item => item.CreatedAt)
+                    .Select(item => new
+                    {
+                        item.Id,
+                        item.ProductId,
+                        item.ProductName,
+                        item.Quantity,
+                        item.UnitPrice,
+                        item.TotalPrice
+                    })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Order history retrieved successfully",
+            data = orders
+        });
+    }
+
+    [HttpGet("all-orders")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> GetAllOrders()
+    {
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Include(order => order.OrderItems)
+            .Include(order => order.User)
+            .OrderByDescending(order => order.OrderedAt)
+            .Select(order => new
+            {
+                order.Id,
+                order.UserId,
+                CustomerName = string.IsNullOrWhiteSpace(order.ShippingName)
+                    ? order.User.FullName
+                    : order.ShippingName,
+                CustomerEmail = order.User.Email,
+                order.OrderNumber,
+                order.OrderedAt,
+                order.FinalAmount,
+                order.OrderStatus,
+                order.PaymentStatus,
+                order.PaymentMethod,
+                order.ShippingName,
+                order.ShippingPhone,
+                order.ShippingAddress,
+                Note = order.Notes,
+                Items = order.OrderItems
+                    .OrderBy(item => item.CreatedAt)
+                    .Select(item => new
+                    {
+                        item.Id,
+                        item.ProductId,
+                        item.ProductName,
+                        item.Quantity,
+                        item.UnitPrice,
+                        item.TotalPrice
+                    })
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "All orders retrieved successfully",
+            data = orders
         });
     }
 
