@@ -284,6 +284,91 @@ public class AdminDashboardController : ControllerBase
         });
     }
 
+    [HttpGet("revenue/products")]
+    public async Task<IActionResult> GetProductRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    {
+        var (startDateUtc, endDateUtc, error) = ValidateDateRange(from, to);
+        if (error != null)
+        {
+            return BadRequest(error);
+        }
+
+        var queryEndExclusive = endDateUtc.AddDays(1);
+
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Where(order => order.OrderedAt >= startDateUtc && order.OrderedAt < queryEndExclusive)
+            .Select(order => new
+            {
+                order.Id,
+                order.OrderStatus,
+                order.PaymentStatus,
+                FinalAmount = EF.Property<decimal?>(order, nameof(Order.FinalAmount))
+            })
+            .ToListAsync();
+
+        var completedOrders = orders.Where(order => IsCompletedOrderStatus(order.OrderStatus)).ToList();
+        var refundedOrders = orders.Where(order => IsRefundedOrderStatus(order.OrderStatus) || IsRefundedPaymentStatus(order.PaymentStatus)).ToList();
+        var pendingOrders = orders.Where(order => IsPendingOrderStatus(order.OrderStatus) && !IsCancelledOrderStatus(order.OrderStatus)).ToList();
+        var cancelledOrders = orders.Where(order => IsCancelledOrderStatus(order.OrderStatus)).ToList();
+
+        var completedRevenue = completedOrders.Sum(order => order.FinalAmount ?? 0m);
+        var refundRevenue = refundedOrders.Sum(order => order.FinalAmount ?? 0m);
+        var pendingRevenue = pendingOrders.Sum(order => order.FinalAmount ?? 0m);
+        var cancelledRevenue = cancelledOrders.Sum(order => order.FinalAmount ?? 0m);
+        var totalRevenue = completedRevenue;
+        var netRevenue = completedRevenue - refundRevenue;
+
+        var revenueByProduct = await _context.OrderItems
+            .AsNoTracking()
+            .Include(item => item.Order)
+            .Where(item => item.Order.OrderedAt >= startDateUtc && item.Order.OrderedAt < queryEndExclusive)
+            .Select(item => new
+            {
+                item.ProductId,
+                item.ProductName,
+                item.Quantity,
+                item.TotalPrice,
+                item.Order.OrderStatus,
+                item.Order.PaymentStatus
+            })
+            .GroupBy(item => new { item.ProductId, item.ProductName })
+            .Select(group => new
+            {
+                productId = group.Key.ProductId,
+                productName = group.Key.ProductName,
+                soldQuantity = group.Where(item => IsCompletedOrderStatus(item.OrderStatus)).Sum(item => item.Quantity),
+                totalRevenue = group.Where(item => IsCompletedOrderStatus(item.OrderStatus)).Sum(item => item.TotalPrice),
+                refundRevenue = group.Where(item => IsRefundedOrderStatus(item.OrderStatus) || IsRefundedPaymentStatus(item.PaymentStatus)).Sum(item => item.TotalPrice),
+                pendingRevenue = group.Where(item => IsPendingOrderStatus(item.OrderStatus)).Sum(item => item.TotalPrice)
+            })
+            .OrderByDescending(item => item.totalRevenue)
+            .ToListAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Product revenue retrieved successfully",
+            data = new
+            {
+                from = startDateUtc,
+                to = endDateUtc,
+                totalOrders = orders.Count,
+                completedOrders = completedOrders.Count,
+                pendingOrders = pendingOrders.Count,
+                cancelledOrders = cancelledOrders.Count,
+                refundedOrders = refundedOrders.Count,
+                totalRevenue,
+                netRevenue,
+                refundRevenue,
+                pendingRevenue,
+                cancelledRevenue,
+                revenueByProduct,
+                generatedAt = DateTime.UtcNow
+            }
+        });
+    }
+
     [HttpGet("revenue/total")]
     public async Task<IActionResult> GetTotalRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
@@ -325,6 +410,7 @@ public class AdminDashboardController : ControllerBase
         var productPendingRevenue = orders
             .Where(order => IsPendingOrderStatus(order.OrderStatus))
             .Sum(order => order.FinalAmount ?? 0m);
+        var productTotalRevenue = productCompletedRevenue;
         var productNetRevenue = productCompletedRevenue - productRefundRevenue;
 
         var appointmentCompletedRevenue = appointments
@@ -336,7 +422,10 @@ public class AdminDashboardController : ControllerBase
         var appointmentCancelledRevenue = appointments
             .Where(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus))
             .Sum(appointment => appointment.TotalAmount ?? 0m);
+        var appointmentTotalRevenue = appointmentCompletedRevenue;
 
+        // Total revenue is defined as product total revenue + appointment total revenue.
+        var totalRevenue = productTotalRevenue + appointmentTotalRevenue;
         var totalGrossRevenue = productCompletedRevenue + productRefundRevenue + appointmentCompletedRevenue;
         var totalNetRevenue = productNetRevenue + appointmentCompletedRevenue;
         var totalPendingRevenue = productPendingRevenue + appointmentPendingRevenue;
@@ -350,8 +439,10 @@ public class AdminDashboardController : ControllerBase
             {
                 from = startDateUtc,
                 to = endDateUtc,
+                totalRevenue,
                 totals = new
                 {
+                    totalRevenue,
                     grossRevenue = totalGrossRevenue,
                     netRevenue = totalNetRevenue,
                     pendingRevenue = totalPendingRevenue,
@@ -359,6 +450,7 @@ public class AdminDashboardController : ControllerBase
                 },
                 products = new
                 {
+                    totalRevenue = productTotalRevenue,
                     completedRevenue = productCompletedRevenue,
                     refundRevenue = productRefundRevenue,
                     pendingRevenue = productPendingRevenue,
@@ -366,6 +458,7 @@ public class AdminDashboardController : ControllerBase
                 },
                 appointments = new
                 {
+                    totalRevenue = appointmentTotalRevenue,
                     completedRevenue = appointmentCompletedRevenue,
                     pendingRevenue = appointmentPendingRevenue,
                     cancelledRevenue = appointmentCancelledRevenue
