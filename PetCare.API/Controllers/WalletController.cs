@@ -268,15 +268,23 @@ public class WalletController : ControllerBase
         }
 
         var userId = GetUserId();
-        var transaction = await _context.WalletTransactions
+        var topupTransactions = await _context.WalletTransactions
             .Include(item => item.Wallet)
             .Where(item => item.UserId == userId && item.ReferenceType == "wallet_topup")
             .OrderByDescending(item => item.CreatedAt)
-            .FirstOrDefaultAsync(item => TryGetTopupOrderCode(item.Description) == orderCode);
+            .ToListAsync();
+
+        var transaction = topupTransactions
+            .FirstOrDefault(item => TryGetTopupOrderCode(item.Description) == orderCode);
 
         if (transaction == null)
         {
             return NotFound(new { success = false, message = "Top-up transaction not found" });
+        }
+
+        if (transaction.Wallet == null)
+        {
+            return BadRequest(new { success = false, message = "Wallet is missing for this top-up transaction" });
         }
 
         if (string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase))
@@ -365,15 +373,23 @@ public class WalletController : ControllerBase
             var verified = await _payOS.Webhooks.VerifyAsync(sdkWebhook);
             var orderCode = verified.OrderCode;
 
-            var transaction = await _context.WalletTransactions
+            var topupTransactions = await _context.WalletTransactions
                 .Include(item => item.Wallet)
                 .Where(item => item.ReferenceType == "wallet_topup")
                 .OrderByDescending(item => item.CreatedAt)
-                .FirstOrDefaultAsync(item => TryGetTopupOrderCode(item.Description) == orderCode);
+                .ToListAsync();
+
+            var transaction = topupTransactions
+                .FirstOrDefault(item => TryGetTopupOrderCode(item.Description) == orderCode);
 
             if (transaction == null)
             {
                 return Ok(new { success = false, message = "Top-up transaction not found" });
+            }
+
+            if (transaction.Wallet == null)
+            {
+                return Ok(new { success = false, message = "Wallet is missing for this top-up transaction" });
             }
 
             if (string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase))
