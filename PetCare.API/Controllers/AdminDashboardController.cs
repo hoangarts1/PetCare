@@ -216,6 +216,165 @@ public class AdminDashboardController : ControllerBase
         });
     }
 
+    [HttpGet("revenue/appointments")]
+    public async Task<IActionResult> GetAppointmentRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    {
+        var (startDateUtc, endDateUtc, error) = ValidateDateRange(from, to);
+        if (error != null)
+        {
+            return BadRequest(error);
+        }
+
+        var queryEndExclusive = endDateUtc.AddDays(1);
+
+        var appointments = await _context.Appointments
+            .AsNoTracking()
+            .Where(appointment => appointment.AppointmentDate >= startDateUtc && appointment.AppointmentDate < queryEndExclusive)
+            .Select(appointment => new
+            {
+                appointment.Id,
+                appointment.AppointmentType,
+                appointment.AppointmentStatus,
+                appointment.AppointmentDate,
+                appointment.TotalAmount
+            })
+            .ToListAsync();
+
+        var completedAppointments = appointments.Where(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)).ToList();
+        var pendingAppointments = appointments.Where(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus)).ToList();
+        var cancelledAppointments = appointments.Where(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus)).ToList();
+
+        var completedRevenue = completedAppointments.Sum(appointment => appointment.TotalAmount ?? 0m);
+        var pendingRevenue = pendingAppointments.Sum(appointment => appointment.TotalAmount ?? 0m);
+        var cancelledRevenue = cancelledAppointments.Sum(appointment => appointment.TotalAmount ?? 0m);
+
+        var revenueByService = appointments
+            .GroupBy(appointment => string.IsNullOrWhiteSpace(appointment.AppointmentType) ? "Unknown" : appointment.AppointmentType)
+            .Select(group => new
+            {
+                appointmentType = group.Key,
+                completedCount = group.Count(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)),
+                pendingCount = group.Count(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus)),
+                cancelledCount = group.Count(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus)),
+                completedRevenue = group.Where(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)).Sum(appointment => appointment.TotalAmount ?? 0m),
+                pendingRevenue = group.Where(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus)).Sum(appointment => appointment.TotalAmount ?? 0m),
+                cancelledRevenue = group.Where(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus)).Sum(appointment => appointment.TotalAmount ?? 0m)
+            })
+            .OrderByDescending(item => item.completedRevenue)
+            .ToList();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Appointment revenue retrieved successfully",
+            data = new
+            {
+                from = startDateUtc,
+                to = endDateUtc,
+                totalAppointments = appointments.Count,
+                completedAppointments = completedAppointments.Count,
+                pendingAppointments = pendingAppointments.Count,
+                cancelledAppointments = cancelledAppointments.Count,
+                totalRevenue = completedRevenue,
+                pendingRevenue,
+                cancelledRevenue,
+                revenueByService,
+                generatedAt = DateTime.UtcNow
+            }
+        });
+    }
+
+    [HttpGet("revenue/total")]
+    public async Task<IActionResult> GetTotalRevenue([FromQuery] DateTime? from, [FromQuery] DateTime? to)
+    {
+        var (startDateUtc, endDateUtc, error) = ValidateDateRange(from, to);
+        if (error != null)
+        {
+            return BadRequest(error);
+        }
+
+        var queryEndExclusive = endDateUtc.AddDays(1);
+
+        var orders = await _context.Orders
+            .AsNoTracking()
+            .Where(order => order.OrderedAt >= startDateUtc && order.OrderedAt < queryEndExclusive)
+            .Select(order => new
+            {
+                order.OrderStatus,
+                order.PaymentStatus,
+                order.FinalAmount
+            })
+            .ToListAsync();
+
+        var appointments = await _context.Appointments
+            .AsNoTracking()
+            .Where(appointment => appointment.AppointmentDate >= startDateUtc && appointment.AppointmentDate < queryEndExclusive)
+            .Select(appointment => new
+            {
+                appointment.AppointmentStatus,
+                appointment.TotalAmount
+            })
+            .ToListAsync();
+
+        var productCompletedRevenue = orders
+            .Where(order => IsCompletedOrderStatus(order.OrderStatus))
+            .Sum(order => order.FinalAmount);
+        var productRefundRevenue = orders
+            .Where(order => IsRefundedOrderStatus(order.OrderStatus) || IsRefundedPaymentStatus(order.PaymentStatus))
+            .Sum(order => order.FinalAmount);
+        var productPendingRevenue = orders
+            .Where(order => IsPendingOrderStatus(order.OrderStatus))
+            .Sum(order => order.FinalAmount);
+        var productNetRevenue = productCompletedRevenue - productRefundRevenue;
+
+        var appointmentCompletedRevenue = appointments
+            .Where(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus))
+            .Sum(appointment => appointment.TotalAmount ?? 0m);
+        var appointmentPendingRevenue = appointments
+            .Where(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus))
+            .Sum(appointment => appointment.TotalAmount ?? 0m);
+        var appointmentCancelledRevenue = appointments
+            .Where(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus))
+            .Sum(appointment => appointment.TotalAmount ?? 0m);
+
+        var totalGrossRevenue = productCompletedRevenue + productRefundRevenue + appointmentCompletedRevenue;
+        var totalNetRevenue = productNetRevenue + appointmentCompletedRevenue;
+        var totalPendingRevenue = productPendingRevenue + appointmentPendingRevenue;
+        var totalCancelledRevenue = appointmentCancelledRevenue;
+
+        return Ok(new
+        {
+            success = true,
+            message = "Total revenue (products and appointments) retrieved successfully",
+            data = new
+            {
+                from = startDateUtc,
+                to = endDateUtc,
+                totals = new
+                {
+                    grossRevenue = totalGrossRevenue,
+                    netRevenue = totalNetRevenue,
+                    pendingRevenue = totalPendingRevenue,
+                    cancelledRevenue = totalCancelledRevenue
+                },
+                products = new
+                {
+                    completedRevenue = productCompletedRevenue,
+                    refundRevenue = productRefundRevenue,
+                    pendingRevenue = productPendingRevenue,
+                    netRevenue = productNetRevenue
+                },
+                appointments = new
+                {
+                    completedRevenue = appointmentCompletedRevenue,
+                    pendingRevenue = appointmentPendingRevenue,
+                    cancelledRevenue = appointmentCancelledRevenue
+                },
+                generatedAt = DateTime.UtcNow
+            }
+        });
+    }
+
     [HttpGet("reports/summary")]
     public async Task<IActionResult> GetSummaryReport([FromQuery] DateTime? from, [FromQuery] DateTime? to)
     {
