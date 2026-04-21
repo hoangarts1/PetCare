@@ -320,9 +320,8 @@ public class AdminDashboardController : ControllerBase
         var totalRevenue = completedRevenue;
         var netRevenue = completedRevenue - refundRevenue;
 
-        var revenueByProduct = await _context.OrderItems
+        var orderItems = await _context.OrderItems
             .AsNoTracking()
-            .Include(item => item.Order)
             .Where(item => item.Order.OrderedAt >= startDateUtc && item.Order.OrderedAt < queryEndExclusive)
             .Select(item => new
             {
@@ -333,6 +332,9 @@ public class AdminDashboardController : ControllerBase
                 item.Order.OrderStatus,
                 item.Order.PaymentStatus
             })
+            .ToListAsync();
+
+        var revenueByProduct = orderItems
             .GroupBy(item => new { item.ProductId, item.ProductName })
             .Select(group => new
             {
@@ -344,7 +346,7 @@ public class AdminDashboardController : ControllerBase
                 pendingRevenue = group.Where(item => IsPendingOrderStatus(item.OrderStatus)).Sum(item => item.TotalPrice)
             })
             .OrderByDescending(item => item.totalRevenue)
-            .ToListAsync();
+            .ToList();
 
         return Ok(new
         {
