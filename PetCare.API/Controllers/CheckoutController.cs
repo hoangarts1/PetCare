@@ -343,7 +343,6 @@ public class CheckoutController : ControllerBase
                 var balanceBefore = wallet.Balance;
                 wallet.Balance -= finalAmount;
                 wallet.UpdatedAt = now;
-                order.OrderStatus = "confirmed";
 
                 await _context.WalletTransactions.AddAsync(new WalletTransaction
                 {
@@ -362,6 +361,15 @@ public class CheckoutController : ControllerBase
                 });
             }
         }
+
+        await _context.OrderStatusHistories.AddAsync(new OrderStatusHistory
+        {
+            OrderId = order.Id,
+            Status = "pending",
+            Notes = "Order created",
+            UpdatedBy = userId,
+            CreatedAt = now
+        });
 
         _context.CartItems.RemoveRange(cartItems);
         try
@@ -573,6 +581,209 @@ public class CheckoutController : ControllerBase
                 order.OrderNumber,
                 refundAmount = order.FinalAmount,
                 walletBalance = wallet.Balance,
+                order.OrderStatus,
+                order.PaymentStatus
+            }
+        });
+    }
+
+    [HttpPost("{orderId:guid}/cancel")]
+    public async Task<IActionResult> CancelOrder(Guid orderId)
+    {
+        var userId = GetUserId();
+
+        var order = await _context.Orders
+            .Include(item => item.OrderItems)
+            .FirstOrDefaultAsync(item => item.Id == orderId && item.UserId == userId);
+
+        if (order == null)
+        {
+            return NotFound(new { success = false, message = "Order not found" });
+        }
+
+        if (!string.Equals(order.OrderStatus, "pending", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Only pending orders can be cancelled"
+            });
+        }
+
+        var now = DateTime.UtcNow;
+
+        foreach (var orderItem in order.OrderItems)
+        {
+            var product = await _context.Products.FirstOrDefaultAsync(item => item.Id == orderItem.ProductId);
+            if (product != null)
+            {
+                product.StockQuantity += orderItem.Quantity;
+                product.UpdatedAt = now;
+            }
+        }
+
+        decimal refundedAmount = 0m;
+        var paid = string.Equals(order.PaymentStatus, "paid", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(order.PaymentStatus, "completed", StringComparison.OrdinalIgnoreCase);
+
+        if (paid && order.FinalAmount > 0m)
+        {
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(item => item.UserId == userId);
+            if (wallet == null)
+            {
+                wallet = new Wallet
+                {
+                    UserId = userId,
+                    Balance = 0m,
+                    PendingWithdrawal = 0m,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                await _context.Wallets.AddAsync(wallet);
+            }
+
+            var balanceBefore = wallet.Balance;
+            refundedAmount = order.FinalAmount;
+            wallet.Balance += refundedAmount;
+            wallet.UpdatedAt = now;
+
+            await _context.WalletTransactions.AddAsync(new WalletTransaction
+            {
+                WalletId = wallet.Id,
+                UserId = userId,
+                TransactionType = "order_refund",
+                Status = "completed",
+                Amount = refundedAmount,
+                BalanceBefore = balanceBefore,
+                BalanceAfter = wallet.Balance,
+                ReferenceType = "order",
+                ReferenceId = order.Id,
+                Description = $"Refund for cancelled order {order.OrderNumber}",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
+        order.OrderStatus = "cancelled";
+        order.PaymentStatus = refundedAmount > 0m ? "refunded" : "cancelled";
+        order.UpdatedAt = now;
+
+        var payment = await _context.Payments.FirstOrDefaultAsync(item => item.OrderId == order.Id);
+        if (payment != null)
+        {
+            if (refundedAmount > 0m)
+            {
+                payment.PaymentStatus = "refunded";
+                payment.RefundedAt = now;
+                payment.RefundAmount = refundedAmount;
+                payment.RefundReason = "Order cancelled by customer while pending";
+            }
+            else
+            {
+                payment.PaymentStatus = "cancelled";
+            }
+
+            payment.UpdatedAt = now;
+        }
+
+        await _context.OrderStatusHistories.AddAsync(new OrderStatusHistory
+        {
+            OrderId = order.Id,
+            Status = "cancelled",
+            Notes = refundedAmount > 0m
+                ? "Order cancelled by customer and refunded to wallet"
+                : "Order cancelled by customer",
+            UpdatedBy = userId,
+            CreatedAt = now
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = refundedAmount > 0m
+                ? "Order cancelled successfully. Amount refunded to your PetCare wallet."
+                : "Order cancelled successfully",
+            data = new
+            {
+                order.Id,
+                order.OrderNumber,
+                order.OrderStatus,
+                order.PaymentStatus,
+                refundedAmount
+            }
+        });
+    }
+
+    [HttpPost("{orderId:guid}/mark-completed")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> MarkOrderCompleted(Guid orderId)
+    {
+        var staffId = GetUserId();
+        var order = await _context.Orders.FirstOrDefaultAsync(item => item.Id == orderId);
+
+        if (order == null)
+        {
+            return NotFound(new { success = false, message = "Order not found" });
+        }
+
+        if (!string.Equals(order.OrderStatus, "pending", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(order.OrderStatus, "confirmed", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(order.OrderStatus, "processing", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(order.OrderStatus, "shipping", StringComparison.OrdinalIgnoreCase))
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Only active orders can be marked as completed"
+            });
+        }
+
+        var now = DateTime.UtcNow;
+        order.OrderStatus = "completed";
+        order.UpdatedAt = now;
+
+        if (string.Equals(order.PaymentMethod, "cod", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(order.PaymentStatus, "pending", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(order.PaymentStatus, "unpaid", StringComparison.OrdinalIgnoreCase)))
+        {
+            order.PaymentStatus = "paid";
+        }
+
+        var payment = await _context.Payments.FirstOrDefaultAsync(item => item.OrderId == order.Id);
+        if (payment != null)
+        {
+            if (string.Equals(order.PaymentMethod, "cod", StringComparison.OrdinalIgnoreCase)
+                && (string.Equals(payment.PaymentStatus, "pending", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(payment.PaymentStatus, "unpaid", StringComparison.OrdinalIgnoreCase)))
+            {
+                payment.PaymentStatus = "completed";
+                payment.PaidAt = now;
+            }
+
+            payment.UpdatedAt = now;
+        }
+
+        await _context.OrderStatusHistories.AddAsync(new OrderStatusHistory
+        {
+            OrderId = order.Id,
+            Status = "completed",
+            Notes = "Order marked as delivered by staff",
+            UpdatedBy = staffId,
+            CreatedAt = now
+        });
+
+        await _context.SaveChangesAsync();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Order marked as completed",
+            data = new
+            {
+                order.Id,
+                order.OrderNumber,
                 order.OrderStatus,
                 order.PaymentStatus
             }
