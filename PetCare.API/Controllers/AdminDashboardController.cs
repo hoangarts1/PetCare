@@ -302,7 +302,7 @@ public class AdminDashboardController : ControllerBase
             {
                 order.OrderStatus,
                 order.PaymentStatus,
-                order.FinalAmount
+                FinalAmount = EF.Property<decimal?>(order, nameof(Order.FinalAmount))
             })
             .ToListAsync();
 
@@ -318,13 +318,13 @@ public class AdminDashboardController : ControllerBase
 
         var productCompletedRevenue = orders
             .Where(order => IsCompletedOrderStatus(order.OrderStatus))
-            .Sum(order => order.FinalAmount);
+            .Sum(order => order.FinalAmount ?? 0m);
         var productRefundRevenue = orders
             .Where(order => IsRefundedOrderStatus(order.OrderStatus) || IsRefundedPaymentStatus(order.PaymentStatus))
-            .Sum(order => order.FinalAmount);
+            .Sum(order => order.FinalAmount ?? 0m);
         var productPendingRevenue = orders
             .Where(order => IsPendingOrderStatus(order.OrderStatus))
-            .Sum(order => order.FinalAmount);
+            .Sum(order => order.FinalAmount ?? 0m);
         var productNetRevenue = productCompletedRevenue - productRefundRevenue;
 
         var appointmentCompletedRevenue = appointments
