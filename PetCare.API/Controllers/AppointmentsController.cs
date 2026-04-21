@@ -155,6 +155,17 @@ public class AppointmentsController : ControllerBase
     }
 
     /// <summary>
+    /// Staff / Admin gets used appointment history (completed appointments)
+    /// </summary>
+    [HttpGet("used-history")]
+    [Authorize(Roles = StaffAdminRoles)]
+    public async Task<IActionResult> GetUsedAppointmentHistory([FromQuery] DateTime? date)
+    {
+        var result = await _appointmentService.GetAllAppointmentsAsync("completed", date);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>
     /// Staff / Admin updates appointment status
     /// </summary>
     [HttpPatch("{id:guid}/status")]

@@ -57,12 +57,39 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
             .Include(a => a.StatusHistory)
             .AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(status))
-            query = query.Where(a => a.AppointmentStatus == status);
+        var normalizedStatus = NormalizeStatusFilter(status);
+        if (!string.IsNullOrEmpty(normalizedStatus))
+        {
+            query = query.Where(a => (a.AppointmentStatus ?? string.Empty).ToLower() == normalizedStatus);
+        }
 
         if (date.HasValue)
-            query = query.Where(a => a.AppointmentDate.Date == date.Value.Date);
+        {
+            // Use UTC date range to avoid DateTimeKind issues with PostgreSQL timestamptz.
+            var normalizedDateUtc = DateTime.SpecifyKind(date.Value.Date, DateTimeKind.Utc);
+            var nextDateUtc = normalizedDateUtc.AddDays(1);
+            query = query.Where(a => a.AppointmentDate >= normalizedDateUtc && a.AppointmentDate < nextDateUtc);
+        }
 
         return await query.OrderByDescending(a => a.AppointmentDate).ToListAsync();
+    }
+
+    private static string? NormalizeStatusFilter(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+            return null;
+
+        var normalized = status.Trim().ToLowerInvariant().Replace("_", "-").Replace(" ", "-");
+        return normalized switch
+        {
+            "all" => null,
+            "used" => "completed",
+            "done" => "completed",
+            "checkedin" => "checked-in",
+            "checkin" => "checked-in",
+            "inprogress" => "in-progress",
+            "canceled" => "cancelled",
+            _ => normalized
+        };
     }
 }
