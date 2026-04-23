@@ -14,6 +14,7 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     public async Task<IEnumerable<Appointment>> GetAppointmentsByUserIdAsync(Guid userId)
     {
         return await _dbSet
+            .Include(a => a.Service)
             .Include(a => a.AssignedStaff)
             .Include(a => a.StatusHistory)
             .Where(a => a.UserId == userId)
@@ -25,6 +26,7 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         return await _dbSet
             .Include(a => a.User)
+            .Include(a => a.Service)
             .Include(a => a.AssignedStaff)
             .Where(a => a.AppointmentDate.Date == date.Date)
             .OrderBy(a => a.StartTime)
@@ -35,8 +37,10 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         return await _dbSet
             .Include(a => a.User)
+            .Include(a => a.Service)
             .Include(a => a.AssignedStaff)
             .Include(a => a.StatusHistory)
+            .Include(a => a.UsedServices)
             .FirstOrDefaultAsync(a => a.Id == appointmentId);
     }
 
@@ -44,6 +48,7 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         return await _dbSet
             .Include(a => a.User)
+            .Include(a => a.Service)
             .Where(a => a.AssignedStaffId == staffId && a.AppointmentDate.Date == date.Date)
             .OrderBy(a => a.StartTime)
             .ToListAsync();
@@ -53,8 +58,10 @@ public class AppointmentRepository : GenericRepository<Appointment>, IAppointmen
     {
         var query = _dbSet
             .Include(a => a.User)
+            .Include(a => a.Service)
             .Include(a => a.AssignedStaff)
             .Include(a => a.StatusHistory)
+            .Include(a => a.UsedServices)
             .AsQueryable();
 
         var normalizedStatus = NormalizeStatusFilter(status);
