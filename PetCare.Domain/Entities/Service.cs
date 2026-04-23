@@ -13,4 +13,5 @@ public class Service : BaseEntity
 
     // Navigation properties
     public virtual ICollection<StaffService> StaffServices { get; set; } = new List<StaffService>();
+    public virtual ICollection<AppointmentUsedService> AppointmentUsedServices { get; set; } = new List<AppointmentUsedService>();
 }

@@ -195,6 +195,27 @@ public class AppointmentService : IAppointmentService
     {
         try
         {
+            var requestedServiceIds = (dto.ServiceIds ?? new List<Guid>())
+                .Concat(dto.ServiceId.HasValue ? new[] { dto.ServiceId.Value } : Array.Empty<Guid>())
+                .Where(serviceId => serviceId != Guid.Empty)
+                .Distinct()
+                .ToList();
+
+            var services = new List<Service>();
+            if (requestedServiceIds.Count > 0)
+            {
+                services = await _unitOfWork.Repository<Service>()
+                    .Query()
+                    .Where(service => requestedServiceIds.Contains(service.Id))
+                    .ToListAsync();
+
+                if (services.Count != requestedServiceIds.Count || services.Any(service => !service.IsActive))
+                    return ServiceResult<AppointmentResponseDto>.FailureResult("Dịch vụ không tồn tại hoặc đã ngừng hoạt động");
+
+                if (services.Any(service => service.IsHomeService))
+                    return ServiceResult<AppointmentResponseDto>.FailureResult("Không hỗ trợ dịch vụ tại nhà");
+            }
+
             if (dto.AppointmentType.Contains("home", StringComparison.OrdinalIgnoreCase)
                 || dto.AppointmentType.Contains("tại nhà", StringComparison.OrdinalIgnoreCase))
             {
@@ -204,17 +225,38 @@ public class AppointmentService : IAppointmentService
             var appointment = new Appointment
             {
                 UserId = userId,
+                ServiceId = services.Select(service => (Guid?)service.Id).FirstOrDefault(),
                 Pet = string.IsNullOrWhiteSpace(dto.Pet) ? null : dto.Pet.Trim(),
                 AppointmentType = dto.AppointmentType,
+                ServiceName = services.Count > 0
+                    ? string.Join(", ", services.Select(service => service.ServiceName))
+                    : (string.IsNullOrWhiteSpace(dto.AppointmentType) ? null : dto.AppointmentType.Trim()),
                 AppointmentStatus = "pending",
                 AppointmentDate = DateTime.SpecifyKind(dto.AppointmentDate, DateTimeKind.Utc),
                 StartTime = dto.StartTime,
                 ServiceAddress = null,
                 CheckInCode = await GenerateCheckInCodeAsync(dto.AppointmentDate),
-                Notes = dto.Notes
+                Notes = dto.Notes,
+                TotalAmount = services.Count > 0 ? services.Sum(service => service.Price) : null
             };
 
             await _unitOfWork.Repository<Appointment>().AddAsync(appointment);
+
+            if (services.Count > 0)
+            {
+                var plannedServices = services.Select(service => new AppointmentUsedService
+                {
+                    AppointmentId = appointment.Id,
+                    ServiceId = service.Id,
+                    ServiceName = service.ServiceName,
+                    Quantity = 1,
+                    UnitPrice = service.Price,
+                    LineTotal = service.Price,
+                    CompletedAt = null
+                }).ToList();
+
+                await _unitOfWork.Repository<AppointmentUsedService>().AddRangeAsync(plannedServices);
+            }
 
             // Record initial status history
             var history = new AppointmentStatusHistory
@@ -547,12 +589,41 @@ public class AppointmentService : IAppointmentService
 
         var totalAmount = selectedServices.Sum(item => item.Service.Price * item.Quantity);
         var selectedServiceNames = selectedServices.Select(item => item.Service.ServiceName).ToList();
+        var selectedServiceId = selectedServices.Select(item => item.Service.Id).FirstOrDefault();
+        var resolvedServiceName = selectedServiceNames.Count > 0
+            ? string.Join(", ", selectedServiceNames)
+            : appointment.ServiceName;
+
+        var existingUsedServices = await _unitOfWork.Repository<AppointmentUsedService>()
+            .Query()
+            .Where(item => item.AppointmentId == appointment.Id)
+            .ToListAsync();
+
+        if (existingUsedServices.Count > 0)
+        {
+            await _unitOfWork.Repository<AppointmentUsedService>().DeleteRangeAsync(existingUsedServices);
+        }
+
+        var usedServices = selectedServices.Select(item => new AppointmentUsedService
+        {
+            AppointmentId = appointment.Id,
+            ServiceId = item.Service.Id,
+            ServiceName = item.Service.ServiceName,
+            Quantity = item.Quantity,
+            UnitPrice = item.Service.Price,
+            LineTotal = item.Service.Price * item.Quantity,
+            CompletedAt = null
+        }).ToList();
+
+        await _unitOfWork.Repository<AppointmentUsedService>().AddRangeAsync(usedServices);
 
         appointment.AssignedStaffId = staffId;
         appointment.AppointmentStatus = "in-progress";
         appointment.StartedAt = DateTime.UtcNow;
         appointment.UpdatedAt = DateTime.UtcNow;
         appointment.TotalAmount = totalAmount;
+        appointment.ServiceId = selectedServiceId == Guid.Empty ? appointment.ServiceId : selectedServiceId;
+        appointment.ServiceName = resolvedServiceName;
 
         var selectedServicesNote = $"Dich vu da chon khi check-in: {string.Join(", ", selectedServiceNames)}";
         if (!string.IsNullOrWhiteSpace(dto.Notes))
@@ -593,6 +664,28 @@ public class AppointmentService : IAppointmentService
         appointment.CompletedAt = DateTime.UtcNow;
         appointment.UpdatedAt = DateTime.UtcNow;
         appointment.BillNumber ??= GenerateBillNumber(appointment.Id);
+
+        var usedServices = await _unitOfWork.Repository<AppointmentUsedService>()
+            .Query()
+            .Where(item => item.AppointmentId == appointment.Id)
+            .ToListAsync();
+
+        foreach (var usedService in usedServices)
+        {
+            usedService.CompletedAt = appointment.CompletedAt;
+        }
+
+        if (usedServices.Count > 0)
+        {
+            appointment.TotalAmount = usedServices.Sum(item => item.LineTotal);
+            appointment.ServiceId ??= usedServices.Select(item => item.ServiceId).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(appointment.ServiceName))
+            {
+                appointment.ServiceName = string.Join(", ", usedServices.Select(item => item.ServiceName));
+            }
+
+            await _unitOfWork.Repository<AppointmentUsedService>().UpdateRangeAsync(usedServices);
+        }
 
         if (!string.IsNullOrWhiteSpace(notes))
             appointment.Notes = notes;
@@ -641,8 +734,21 @@ public class AppointmentService : IAppointmentService
         if (!isPrivileged && appointment.UserId != userId)
             return ServiceResult<AppointmentBillDto>.FailureResult("You do not have permission to view this bill");
 
-        var items = new List<AppointmentServiceItemResponseDto>();
-        var total = appointment.TotalAmount ?? 0m;
+        var items = appointment.UsedServices
+            .OrderBy(item => item.CreatedAt)
+            .Select(item => new AppointmentServiceItemResponseDto
+            {
+                ServiceId = item.ServiceId,
+                ServiceName = item.ServiceName,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice,
+                LineTotal = item.LineTotal
+            })
+            .ToList();
+
+        var total = items.Count > 0
+            ? items.Sum(item => item.LineTotal)
+            : appointment.TotalAmount ?? 0m;
 
         var bill = new AppointmentBillDto
         {
@@ -731,9 +837,11 @@ public class AppointmentService : IAppointmentService
     {
         Id = a.Id,
         UserId = a.UserId,
+        ServiceId = a.ServiceId,
         UserName = a.User?.FullName ?? string.Empty,
         Pet = a.Pet,
         AppointmentType = a.AppointmentType,
+        ServiceName = a.Service?.ServiceName ?? a.ServiceName,
         AppointmentStatus = a.AppointmentStatus,
         AssignedStaffId = a.AssignedStaffId,
         AssignedStaffName = a.AssignedStaff?.FullName,
@@ -747,6 +855,17 @@ public class AppointmentService : IAppointmentService
         CompletedAt = a.CompletedAt,
         BillNumber = a.BillNumber,
         TotalAmount = a.TotalAmount,
+        UsedServices = a.UsedServices
+            .OrderBy(item => item.CreatedAt)
+            .Select(item => new AppointmentServiceItemResponseDto
+            {
+                ServiceId = item.ServiceId,
+                ServiceName = item.ServiceName,
+                Quantity = item.Quantity,
+                UnitPrice = item.UnitPrice,
+                LineTotal = item.LineTotal
+            })
+            .ToList(),
         StatusHistory = a.StatusHistory
             .OrderBy(h => h.CreatedAt)
             .Select(h => new AppointmentStatusHistoryDto

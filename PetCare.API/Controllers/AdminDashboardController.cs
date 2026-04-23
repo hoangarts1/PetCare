@@ -233,7 +233,11 @@ public class AdminDashboardController : ControllerBase
             .Select(appointment => new
             {
                 appointment.Id,
+                appointment.ServiceId,
                 appointment.AppointmentType,
+                appointment.ServiceName,
+                ServiceCatalogName = appointment.Service != null ? appointment.Service.ServiceName : null,
+                appointment.Notes,
                 appointment.AppointmentStatus,
                 appointment.AppointmentDate,
                 appointment.TotalAmount
@@ -249,10 +253,12 @@ public class AdminDashboardController : ControllerBase
         var cancelledRevenue = cancelledAppointments.Sum(appointment => appointment.TotalAmount ?? 0m);
 
         var revenueByService = appointments
-            .GroupBy(appointment => string.IsNullOrWhiteSpace(appointment.AppointmentType) ? "Unknown" : appointment.AppointmentType)
+            .GroupBy(appointment => ResolveAppointmentServiceName(appointment.ServiceId, appointment.ServiceCatalogName, appointment.ServiceName, appointment.Notes, appointment.AppointmentType))
             .Select(group => new
             {
-                appointmentType = group.Key,
+                appointmentType = group.Select(appointment => appointment.AppointmentType)
+                    .FirstOrDefault(type => !string.IsNullOrWhiteSpace(type)) ?? "Unknown",
+                appointmentName = group.Key,
                 completedCount = group.Count(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)),
                 pendingCount = group.Count(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus)),
                 cancelledCount = group.Count(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus)),
@@ -870,7 +876,11 @@ public class AdminDashboardController : ControllerBase
             {
                 appointment.Id,
                 appointment.UserId,
+                appointment.ServiceId,
                 appointment.AppointmentType,
+                appointment.ServiceName,
+                ServiceCatalogName = appointment.Service != null ? appointment.Service.ServiceName : null,
+                appointment.Notes,
                 appointment.AppointmentStatus,
                 appointment.TotalAmount,
                 appointment.AppointmentDate
@@ -878,7 +888,7 @@ public class AdminDashboardController : ControllerBase
             .ToListAsync();
 
         var serviceGroups = appointments
-            .GroupBy(appointment => string.IsNullOrWhiteSpace(appointment.AppointmentType) ? "Unknown" : appointment.AppointmentType)
+            .GroupBy(appointment => ResolveAppointmentServiceName(appointment.ServiceId, appointment.ServiceCatalogName, appointment.ServiceName, appointment.Notes, appointment.AppointmentType))
             .Select(group =>
             {
                 var completedRevenue = group.Where(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)).Sum(appointment => appointment.TotalAmount ?? 0m);
@@ -941,7 +951,7 @@ public class AdminDashboardController : ControllerBase
                 to = endDateUtc,
                 services = serviceGroups,
                 topServiceCustomers = topServiceCustomerDetails,
-                note = "Service revenue is based on appointment TotalAmount and AppointmentType because appointment_service_items table has been removed.",
+                note = "Service revenue is based on appointment TotalAmount and service_id (fallback: stored service name and AppointmentType).",
                 generatedAt = DateTime.UtcNow
             }
         });
@@ -1179,6 +1189,43 @@ public class AdminDashboardController : ControllerBase
     {
         var normalized = (status ?? string.Empty).Trim().ToLowerInvariant();
         return normalized is "pending" or "confirmed" or "checked-in" or "in-progress";
+    }
+
+    private static string ResolveAppointmentServiceName(Guid? serviceId, string? serviceCatalogName, string? serviceName, string? notes, string? appointmentType)
+    {
+        if (serviceId.HasValue && !string.IsNullOrWhiteSpace(serviceCatalogName))
+        {
+            return serviceCatalogName.Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(serviceName))
+        {
+            return serviceName.Trim();
+        }
+
+        const string marker = "Dich vu da chon khi check-in:";
+        if (!string.IsNullOrWhiteSpace(notes))
+        {
+            var markerIndex = notes.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0)
+            {
+                var servicePart = notes[(markerIndex + marker.Length)..].Trim();
+
+                // Keep only the first line if notes contains additional content.
+                var lineBreakIndex = servicePart.IndexOfAny(new[] { '\r', '\n' });
+                if (lineBreakIndex >= 0)
+                {
+                    servicePart = servicePart[..lineBreakIndex].Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(servicePart))
+                {
+                    return servicePart;
+                }
+            }
+        }
+
+        return string.IsNullOrWhiteSpace(appointmentType) ? "Unknown" : appointmentType;
     }
 
 }

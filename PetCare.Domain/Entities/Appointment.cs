@@ -5,8 +5,10 @@ using PetCare.Domain.Common;
 public class Appointment : AuditableEntity
 {
     public Guid UserId { get; set; }
+    public Guid? ServiceId { get; set; }
     public string? Pet { get; set; }
     public string AppointmentType { get; set; } = string.Empty;
+    public string? ServiceName { get; set; }
     public string AppointmentStatus { get; set; } = "pending";
     public Guid? AssignedStaffId { get; set; }
     public DateTime AppointmentDate { get; set; }
@@ -23,7 +25,9 @@ public class Appointment : AuditableEntity
 
     // Navigation properties
     public virtual User User { get; set; } = null!;
+    public virtual Service? Service { get; set; }
     public virtual User? AssignedStaff { get; set; }
     public virtual ICollection<AppointmentStatusHistory> StatusHistory { get; set; } = new List<AppointmentStatusHistory>();
+    public virtual ICollection<AppointmentUsedService> UsedServices { get; set; } = new List<AppointmentUsedService>();
     public virtual ICollection<RatingFeedback> RatingFeedbacks { get; set; } = new List<RatingFeedback>();
 }
