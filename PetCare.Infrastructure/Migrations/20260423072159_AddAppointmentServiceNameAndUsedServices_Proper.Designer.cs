@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PetCare.Infrastructure.Data;
@@ -11,9 +12,11 @@ using PetCare.Infrastructure.Data;
 namespace PetCare.Infrastructure.Migrations
 {
     [DbContext(typeof(PetCareDbContext))]
-    partial class PetCareDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260423072159_AddAppointmentServiceNameAndUsedServices_Proper")]
+    partial class AddAppointmentServiceNameAndUsedServices_Proper
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -89,10 +92,6 @@ namespace PetCare.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("service_address");
 
-                    b.Property<Guid?>("ServiceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("service_id");
-
                     b.Property<string>("ServiceName")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
@@ -126,8 +125,6 @@ namespace PetCare.Infrastructure.Migrations
                     b.HasIndex("AssignedStaffId");
 
                     b.HasIndex("CheckInCode");
-
-                    b.HasIndex("ServiceId");
 
                     b.HasIndex("ServiceName");
 
@@ -1078,11 +1075,6 @@ namespace PetCare.Infrastructure.Migrations
                         .HasForeignKey("AssignedStaffId")
                         .OnDelete(DeleteBehavior.Restrict);
 
-                    b.HasOne("PetCare.Domain.Entities.Service", "Service")
-                        .WithMany()
-                        .HasForeignKey("ServiceId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("PetCare.Domain.Entities.User", "User")
                         .WithMany("Appointments")
                         .HasForeignKey("UserId")
@@ -1090,8 +1082,6 @@ namespace PetCare.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("AssignedStaff");
-
-                    b.Navigation("Service");
 
                     b.Navigation("User");
                 });

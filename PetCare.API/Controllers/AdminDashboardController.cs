@@ -234,7 +234,11 @@ public class AdminDashboardController : ControllerBase
             .Select(appointment => new
             {
                 appointment.Id,
+                appointment.ServiceId,
                 appointment.AppointmentType,
+                appointment.ServiceName,
+                ServiceCatalogName = appointment.Service != null ? appointment.Service.ServiceName : null,
+                appointment.Notes,
                 appointment.AppointmentStatus,
                 appointment.AppointmentDate,
                 appointment.TotalAmount
@@ -250,10 +254,12 @@ public class AdminDashboardController : ControllerBase
         var cancelledRevenue = cancelledAppointments.Sum(appointment => appointment.TotalAmount ?? 0m);
 
         var revenueByService = appointments
-            .GroupBy(appointment => string.IsNullOrWhiteSpace(appointment.AppointmentType) ? "Unknown" : appointment.AppointmentType)
+            .GroupBy(appointment => ResolveAppointmentServiceName(appointment.ServiceId, appointment.ServiceCatalogName, appointment.ServiceName, appointment.Notes, appointment.AppointmentType))
             .Select(group => new
             {
-                appointmentType = group.Key,
+                appointmentType = group.Select(appointment => appointment.AppointmentType)
+                    .FirstOrDefault(type => !string.IsNullOrWhiteSpace(type)) ?? "Unknown",
+                appointmentName = group.Key,
                 completedCount = group.Count(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)),
                 pendingCount = group.Count(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus)),
                 cancelledCount = group.Count(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus)),
@@ -871,7 +877,11 @@ public class AdminDashboardController : ControllerBase
             {
                 appointment.Id,
                 appointment.UserId,
+                appointment.ServiceId,
                 appointment.AppointmentType,
+                appointment.ServiceName,
+                ServiceCatalogName = appointment.Service != null ? appointment.Service.ServiceName : null,
+                appointment.Notes,
                 appointment.AppointmentStatus,
                 appointment.TotalAmount,
                 appointment.AppointmentDate
@@ -879,7 +889,7 @@ public class AdminDashboardController : ControllerBase
             .ToListAsync();
 
         var serviceGroups = appointments
-            .GroupBy(appointment => string.IsNullOrWhiteSpace(appointment.AppointmentType) ? "Unknown" : appointment.AppointmentType)
+            .GroupBy(appointment => ResolveAppointmentServiceName(appointment.ServiceId, appointment.ServiceCatalogName, appointment.ServiceName, appointment.Notes, appointment.AppointmentType))
             .Select(group =>
             {
                 var completedRevenue = group.Where(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus)).Sum(appointment => appointment.TotalAmount ?? 0m);
@@ -943,189 +953,6 @@ public class AdminDashboardController : ControllerBase
                 services = serviceGroups,
                 topServiceCustomers = topServiceCustomerDetails,
                 note = "Service revenue is based on appointment TotalAmount and AppointmentType because appointment_service_items table has been removed.",
-                generatedAt = DateTime.UtcNow
-            }
-        });
-    }
-
-    [HttpGet("reports/appointments/usage-history")]
-    public async Task<IActionResult> GetAppointmentUsageHistory(
-        [FromQuery] DateTime? from,
-        [FromQuery] DateTime? to,
-        [FromQuery] string? status,
-        [FromQuery] string? serviceName,
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20)
-    {
-        if (page < 1 || pageSize < 1 || pageSize > 200)
-        {
-            return BadRequest(new { success = false, message = "Invalid pagination parameters" });
-        }
-
-        var (startDateUtc, endDateUtc, error) = ValidateDateRange(from, to);
-        if (error != null)
-        {
-            return BadRequest(error);
-        }
-
-        var normalizedStatus = string.IsNullOrWhiteSpace(status)
-            ? null
-            : status.Trim().ToLowerInvariant();
-        var normalizedServiceName = string.IsNullOrWhiteSpace(serviceName)
-            ? null
-            : serviceName.Trim().ToLowerInvariant();
-
-        var queryEndExclusive = endDateUtc.AddDays(1);
-
-        var appointments = await _context.Appointments
-            .AsNoTracking()
-            .Include(appointment => appointment.User)
-            .Where(appointment => appointment.AppointmentDate >= startDateUtc && appointment.AppointmentDate < queryEndExclusive)
-            .Select(appointment => new
-            {
-                appointment.Id,
-                appointment.UserId,
-                CustomerName = appointment.User != null ? appointment.User.FullName : null,
-                CustomerEmail = appointment.User != null ? appointment.User.Email : null,
-                appointment.AppointmentType,
-                appointment.AppointmentStatus,
-                appointment.AppointmentDate,
-                appointment.StartTime,
-                appointment.Notes,
-                appointment.TotalAmount,
-                appointment.CreatedAt,
-                appointment.UpdatedAt,
-                appointment.CompletedAt
-            })
-            .ToListAsync();
-
-        var histories = appointments
-            .Select(appointment => new
-            {
-                appointment.Id,
-                appointment.UserId,
-                appointment.CustomerName,
-                appointment.CustomerEmail,
-                appointment.AppointmentType,
-                appointment.AppointmentStatus,
-                appointment.AppointmentDate,
-                appointment.StartTime,
-                appointment.Notes,
-                appointment.TotalAmount,
-                appointment.CreatedAt,
-                appointment.UpdatedAt,
-                appointment.CompletedAt,
-                ServiceNames = ExtractServiceNames(appointment.Notes, appointment.AppointmentType)
-            })
-            .ToList();
-
-        if (!string.IsNullOrWhiteSpace(normalizedStatus))
-        {
-            histories = histories
-                .Where(appointment => string.Equals(
-                    appointment.AppointmentStatus?.Trim(),
-                    normalizedStatus,
-                    StringComparison.OrdinalIgnoreCase))
-                .ToList();
-        }
-
-        if (!string.IsNullOrWhiteSpace(normalizedServiceName))
-        {
-            histories = histories
-                .Where(appointment => appointment.ServiceNames.Any(name =>
-                    name.Contains(normalizedServiceName, StringComparison.OrdinalIgnoreCase)))
-                .ToList();
-        }
-
-        var serviceOverview = histories
-            .SelectMany(appointment => appointment.ServiceNames.Select(service => new
-            {
-                ServiceName = service,
-                appointment.Id,
-                appointment.AppointmentStatus,
-                appointment.TotalAmount
-            }))
-            .GroupBy(item => item.ServiceName)
-            .Select(group => new
-            {
-                serviceName = group.Key,
-                usageCount = group.Select(item => item.Id).Distinct().Count(),
-                completedCount = group.Count(item => IsCompletedAppointmentStatus(item.AppointmentStatus)),
-                pendingCount = group.Count(item => IsPendingAppointmentStatus(item.AppointmentStatus)),
-                cancelledCount = group.Count(item => IsCancelledAppointmentStatus(item.AppointmentStatus)),
-                completedRevenue = group
-                    .Where(item => IsCompletedAppointmentStatus(item.AppointmentStatus))
-                    .Sum(item => item.TotalAmount ?? 0m)
-            })
-            .OrderByDescending(item => item.usageCount)
-            .ThenByDescending(item => item.completedRevenue)
-            .ToList();
-
-        var totalCount = histories.Count;
-        var pagedHistories = histories
-            .OrderByDescending(appointment => appointment.AppointmentDate)
-            .ThenByDescending(appointment => appointment.StartTime)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .Select(appointment => new
-            {
-                appointmentId = appointment.Id,
-                appointment.UserId,
-                appointment.CustomerName,
-                appointment.CustomerEmail,
-                appointment.AppointmentType,
-                appointment.AppointmentStatus,
-                appointment.AppointmentDate,
-                appointment.StartTime,
-                appointment.ServiceNames,
-                appointment.TotalAmount,
-                appointment.Notes,
-                appointment.CreatedAt,
-                appointment.UpdatedAt,
-                appointment.CompletedAt
-            })
-            .ToList();
-
-        var completedAppointments = histories.Count(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus));
-        var pendingAppointments = histories.Count(appointment => IsPendingAppointmentStatus(appointment.AppointmentStatus));
-        var cancelledAppointments = histories.Count(appointment => IsCancelledAppointmentStatus(appointment.AppointmentStatus));
-        var completedRevenue = histories
-            .Where(appointment => IsCompletedAppointmentStatus(appointment.AppointmentStatus))
-            .Sum(appointment => appointment.TotalAmount ?? 0m);
-
-        return Ok(new
-        {
-            success = true,
-            message = "Appointment usage history retrieved successfully",
-            data = new
-            {
-                from = startDateUtc,
-                to = endDateUtc,
-                filters = new
-                {
-                    status = normalizedStatus,
-                    serviceName = normalizedServiceName,
-                    page,
-                    pageSize
-                },
-                overview = new
-                {
-                    totalAppointments = totalCount,
-                    completedAppointments,
-                    pendingAppointments,
-                    cancelledAppointments,
-                    completedRevenue
-                },
-                serviceOverview,
-                histories = pagedHistories,
-                pagination = new
-                {
-                    totalCount,
-                    page,
-                    pageSize,
-                    totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
-                },
-                note = "Service names are extracted from appointment notes (start-service flow) with fallback to AppointmentType.",
                 generatedAt = DateTime.UtcNow
             }
         });
@@ -1365,41 +1192,41 @@ public class AdminDashboardController : ControllerBase
         return normalized is "pending" or "confirmed" or "checked-in" or "in-progress";
     }
 
-    private static List<string> ExtractServiceNames(string? notes, string? appointmentType)
+    private static string ResolveAppointmentServiceName(Guid? serviceId, string? serviceCatalogName, string? serviceName, string? notes, string? appointmentType)
     {
-        var result = new List<string>();
+        if (serviceId.HasValue && !string.IsNullOrWhiteSpace(serviceCatalogName))
+        {
+            return serviceCatalogName.Trim();
+        }
 
+        if (!string.IsNullOrWhiteSpace(serviceName))
+        {
+            return serviceName.Trim();
+        }
+
+        const string marker = "Dich vu da chon khi check-in:";
         if (!string.IsNullOrWhiteSpace(notes))
         {
-            var raw = notes.Trim();
-            var pattern = @"Dich\s+vu\s+da\s+chon\s+khi\s+check-?in\s*:\s*(?<services>.+)";
-            var match = Regex.Match(raw, pattern, RegexOptions.IgnoreCase);
-
-            if (match.Success)
+            var markerIndex = notes.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+            if (markerIndex >= 0)
             {
-                var servicesText = match.Groups["services"].Value
-                    .Split('\n', StringSplitOptions.RemoveEmptyEntries)
-                    .FirstOrDefault();
+                var servicePart = notes[(markerIndex + marker.Length)..].Trim();
 
-                if (!string.IsNullOrWhiteSpace(servicesText))
+                // Keep only the first line if notes contains additional content.
+                var lineBreakIndex = servicePart.IndexOfAny(new[] { '\r', '\n' });
+                if (lineBreakIndex >= 0)
                 {
-                    result.AddRange(servicesText
-                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
-                        .Select(service => service.Trim())
-                        .Where(service => !string.IsNullOrWhiteSpace(service)));
+                    servicePart = servicePart[..lineBreakIndex].Trim();
+                }
+
+                if (!string.IsNullOrWhiteSpace(servicePart))
+                {
+                    return servicePart;
                 }
             }
         }
 
-        if (result.Count == 0 && !string.IsNullOrWhiteSpace(appointmentType))
-        {
-            result.Add(appointmentType.Trim());
-        }
-
-        return result
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(service => service)
-            .ToList();
+        return string.IsNullOrWhiteSpace(appointmentType) ? "Unknown" : appointmentType;
     }
 
 }

@@ -27,6 +27,7 @@ public class PetCareDbContext : DbContext
     public DbSet<Service> Services { get; set; }
     public DbSet<StaffService> StaffServices { get; set; }
     public DbSet<Appointment> Appointments { get; set; }
+    public DbSet<AppointmentUsedService> AppointmentUsedServices { get; set; }
     public DbSet<AppointmentStatusHistory> AppointmentStatusHistories { get; set; }
     public DbSet<RatingFeedback> RatingFeedbacks { get; set; }
 
@@ -302,8 +303,10 @@ public class PetCareDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("id");
             entity.Property(e => e.UserId).HasColumnName("user_id");
+            entity.Property(e => e.ServiceId).HasColumnName("service_id");
             entity.Property(e => e.Pet).HasColumnName("pet").HasMaxLength(100);
             entity.Property(e => e.AppointmentType).HasColumnName("appointment_type").IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ServiceName).HasColumnName("service_name").HasMaxLength(255);
             entity.Property(e => e.AppointmentStatus).HasColumnName("appointment_status").HasMaxLength(50);
             entity.Property(e => e.AssignedStaffId).HasColumnName("assigned_staff_id");
             entity.Property(e => e.AppointmentDate).HasColumnName("appointment_date");
@@ -325,14 +328,49 @@ public class PetCareDbContext : DbContext
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            entity.HasOne(e => e.Service)
+                .WithMany()
+                .HasForeignKey(e => e.ServiceId)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasOne(e => e.AssignedStaff)
                 .WithMany()
                 .HasForeignKey(e => e.AssignedStaffId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.ServiceId);
             entity.HasIndex(e => e.AppointmentDate);
             entity.HasIndex(e => e.CheckInCode);
+            entity.HasIndex(e => e.ServiceName);
+        });
+
+        modelBuilder.Entity<AppointmentUsedService>(entity =>
+        {
+            entity.ToTable("appointment_used_services");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AppointmentId).HasColumnName("appointment_id");
+            entity.Property(e => e.ServiceId).HasColumnName("service_id");
+            entity.Property(e => e.ServiceName).HasColumnName("service_name").IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Quantity).HasColumnName("quantity");
+            entity.Property(e => e.UnitPrice).HasColumnName("unit_price").HasPrecision(10, 2);
+            entity.Property(e => e.LineTotal).HasColumnName("line_total").HasPrecision(10, 2);
+            entity.Property(e => e.CompletedAt).HasColumnName("completed_at");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+
+            entity.HasOne(e => e.Appointment)
+                .WithMany(a => a.UsedServices)
+                .HasForeignKey(e => e.AppointmentId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Service)
+                .WithMany(s => s.AppointmentUsedServices)
+                .HasForeignKey(e => e.ServiceId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.AppointmentId);
+            entity.HasIndex(e => e.ServiceId);
         });
 
         modelBuilder.Entity<AppointmentStatusHistory>(entity =>
