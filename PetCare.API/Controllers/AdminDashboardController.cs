@@ -925,6 +925,7 @@ public class AdminDashboardController : ControllerBase
         {
             userId = item.userId,
             customerName = customerMap.TryGetValue(item.userId, out var user) ? user.FullName : null,
+            name = customerMap.TryGetValue(item.userId, out user) ? user.FullName : null,
             customerEmail = customerMap.TryGetValue(item.userId, out user) ? user.Email : null,
             item.appointmentCount,
             item.totalSpent

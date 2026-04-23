@@ -32,7 +32,6 @@ public class AppointmentResponseDto
 {
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
-    public string Name { get; set; } = string.Empty;
     public string UserName { get; set; } = string.Empty;
     public string? Pet { get; set; }
     public string AppointmentType { get; set; } = string.Empty;

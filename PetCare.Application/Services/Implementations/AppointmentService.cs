@@ -731,7 +731,6 @@ public class AppointmentService : IAppointmentService
     {
         Id = a.Id,
         UserId = a.UserId,
-        Name = a.User?.FullName ?? string.Empty,
         UserName = a.User?.FullName ?? string.Empty,
         Pet = a.Pet,
         AppointmentType = a.AppointmentType,
