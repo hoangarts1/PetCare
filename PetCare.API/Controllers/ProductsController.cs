@@ -31,6 +31,11 @@ public class ProductsController : ControllerBase
         {
             return NotFound(result);
         }
+
+        if (result.Data != null && !result.Data.IsActive && !IsStaffOrAdmin())
+        {
+            return NotFound(ServiceResult<ProductDto>.FailureResult("Product not found"));
+        }
         
         return Ok(result);
     }
@@ -43,9 +48,11 @@ public class ProductsController : ControllerBase
     public async Task<IActionResult> GetAll(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
-        [FromQuery] bool includeInactive = true)
+        [FromQuery] bool includeInactive = false)
     {
-        var result = await _productService.GetProductsAsync(page, pageSize, includeInactive);
+        // Public users can only view active products. Staff/Admin can opt in to include inactive.
+        var effectiveIncludeInactive = includeInactive && IsStaffOrAdmin();
+        var result = await _productService.GetProductsAsync(page, pageSize, effectiveIncludeInactive);
         return Ok(result);
     }
 
@@ -157,6 +164,14 @@ public class ProductsController : ControllerBase
             return BadRequest(result);
         }
         return Ok(result);
+    }
+
+    private bool IsStaffOrAdmin()
+    {
+        return User.IsInRole("Staff")
+            || User.IsInRole("staff")
+            || User.IsInRole("Admin")
+            || User.IsInRole("admin");
     }
 
     /// <summary>

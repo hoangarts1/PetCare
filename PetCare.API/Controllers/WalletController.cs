@@ -500,16 +500,38 @@ public class WalletController : ControllerBase
             return BadRequest(new { success = false, message = "AppointmentId is required" });
         }
 
-        var userId = GetUserId();
-        var wallet = await GetOrCreateWalletAsync(userId);
+        var actorUserId = GetUserId();
+        var isStaffOrAdmin = IsStaffOrAdmin();
 
-        var appointment = await _context.Appointments.FirstOrDefaultAsync(item => item.Id == request.AppointmentId && item.UserId == userId);
+        var appointment = await _context.Appointments.FirstOrDefaultAsync(item => item.Id == request.AppointmentId);
         if (appointment == null)
         {
             return NotFound(new { success = false, message = "Appointment not found" });
         }
 
-        if (!string.Equals(appointment.AppointmentStatus, "completed", StringComparison.OrdinalIgnoreCase))
+        // Customers can only pay for their own appointments, while staff/admin can process payment for the appointment owner.
+        if (!isStaffOrAdmin && appointment.UserId != actorUserId)
+        {
+            return NotFound(new { success = false, message = "Appointment not found" });
+        }
+
+        var payerUserId = appointment.UserId;
+        var wallet = await GetOrCreateWalletAsync(payerUserId);
+
+        var appointmentStatus = (appointment.AppointmentStatus ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (isStaffOrAdmin)
+        {
+            if (appointmentStatus is not "in-progress" and not "completed")
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Staff can only charge wallet when appointment is in-progress or completed"
+                });
+            }
+        }
+        else if (!string.Equals(appointmentStatus, "completed", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest(new { success = false, message = "Service can only be paid after appointment is completed" });
         }
@@ -523,7 +545,7 @@ public class WalletController : ControllerBase
         var hasPaid = await _context.WalletTransactions
             .AsNoTracking()
             .AnyAsync(item =>
-                item.UserId == userId
+                item.UserId == payerUserId
                 && item.TransactionType == "service_payment"
                 && item.ReferenceType == "appointment"
                 && item.ReferenceId == appointment.Id
@@ -563,7 +585,7 @@ public class WalletController : ControllerBase
         await _context.WalletTransactions.AddAsync(new WalletTransaction
         {
             WalletId = wallet.Id,
-            UserId = userId,
+            UserId = payerUserId,
             TransactionType = "service_payment",
             Status = "completed",
             Amount = serviceAmount,
@@ -585,12 +607,21 @@ public class WalletController : ControllerBase
             data = new
             {
                 appointmentId = appointment.Id,
+                chargedUserId = payerUserId,
                 paidAmount = serviceAmount,
                 wallet.Balance,
                 wallet.PendingWithdrawal,
                 availableBalance = wallet.Balance - wallet.PendingWithdrawal
             }
         });
+    }
+
+    private bool IsStaffOrAdmin()
+    {
+        return User.IsInRole("Staff")
+            || User.IsInRole("staff")
+            || User.IsInRole("Admin")
+            || User.IsInRole("admin");
     }
 
     [HttpGet("withdrawals")]
